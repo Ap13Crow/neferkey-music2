@@ -19,6 +19,10 @@ async function initDb() {
 
   // Add role column for existing deployments
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'`);
+  // Ensure designated admin account always has admin role
+  await pool.query(
+    `UPDATE users SET role = 'admin' WHERE lower(email) = lower('admin@apollon.care')`,
+  );
 
   // Tracks table (keeps url_key for backwards compat)
   await pool.query(`

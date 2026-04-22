@@ -30,6 +30,10 @@ export default function AdminLinksView({ token, tracks, albums }) {
   const [form, setForm] = useState({ resource_type: 'track', resource_key: '', label: '', expires_at: '' });
   const [copied, setCopied] = useState(null);
   const [formError, setFormError] = useState('');
+  const [users, setUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [usersError, setUsersError] = useState('');
+  const [savingRoleId, setSavingRoleId] = useState(null);
 
   const loadLinks = useCallback(async () => {
     setLoading(true);
@@ -48,6 +52,25 @@ export default function AdminLinksView({ token, tracks, albums }) {
   }, [token]);
 
   useEffect(() => { loadLinks(); }, [loadLinks]);
+
+  const loadUsers = useCallback(async () => {
+    setUsersLoading(true);
+    setUsersError('');
+    try {
+      const res = await fetch(`${API_BASE}/auth/users`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) setUsers(data.users || []);
+      else setUsersError(data.error || 'Failed to load users');
+    } catch {
+      setUsersError('Network error');
+    } finally {
+      setUsersLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => { loadUsers(); }, [loadUsers]);
 
   async function handleCreate(e) {
     e.preventDefault();
@@ -94,6 +117,27 @@ export default function AdminLinksView({ token, tracks, albums }) {
     copyText(url);
     setCopied(linkToken);
     setTimeout(() => setCopied((c) => c === linkToken ? null : c), 2000);
+  }
+
+  async function handleRoleChange(userId, role) {
+    setSavingRoleId(userId);
+    try {
+      const res = await fetch(`${API_BASE}/auth/users/${encodeURIComponent(userId)}/role`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setUsersError(data.error || 'Failed to update role');
+        return;
+      }
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role: data.role } : u)));
+    } catch {
+      setUsersError('Network error');
+    } finally {
+      setSavingRoleId(null);
+    }
   }
 
   const resourceOptions = form.resource_type === 'track' ? tracks : albums;
@@ -247,6 +291,52 @@ export default function AdminLinksView({ token, tracks, albums }) {
           </div>
         );
       })}
+
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '1.25rem', marginTop: '1.25rem' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '1rem' }}>
+          User permissions
+        </div>
+        {usersLoading && <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Loading users…</p>}
+        {usersError && <div className="auth-error" style={{ marginBottom: '0.75rem' }}>{usersError}</div>}
+        {!usersLoading && users.length === 0 && (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>No users found.</p>
+        )}
+        {!usersLoading && users.map((u) => (
+          <div
+            key={u.id}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto',
+              gap: '0.75rem',
+              alignItems: 'center',
+              padding: '0.65rem 0',
+              borderTop: '1px solid var(--border)',
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '0.82rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {u.username}
+              </div>
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {u.email}
+              </div>
+            </div>
+            <select
+              className="form-input speed-select"
+              style={{ fontSize: '0.8rem', padding: '0.4rem 0.55rem', minWidth: 110 }}
+              value={u.role || 'user'}
+              disabled={savingRoleId === u.id}
+              onChange={(e) => handleRoleChange(u.id, e.target.value)}
+            >
+              <option value="user">user</option>
+              <option value="artist">artist</option>
+              <option value="composer">composer</option>
+              <option value="manager">manager</option>
+              <option value="admin">admin</option>
+            </select>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

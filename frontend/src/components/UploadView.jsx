@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { IconUpload, IconTrash, IconNote, IconKey, IconCamera, IconLink, IconCheck } from './Icons';
+import {
+  buildCameraConstraints,
+  extractClaimToken,
+  getCameraAccessErrorMessage,
+  getScanSupportStatus,
+  requestCameraStream,
+} from '../utils/qrScan';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const AUDIO_EXTS = ['.mp3', '.flac', '.ogg', '.wav', '.aac', '.m4a', '.opus'];
@@ -38,16 +45,6 @@ function makeItem(file) {
     status: null,
     message: '',
   };
-}
-
-/** Extract a claim token from a URL string */
-function extractClaimToken(url) {
-  try {
-    const u = new URL(url.trim());
-    return u.searchParams.get('claim') || null;
-  } catch {
-    return null;
-  }
 }
 
 export default function UploadView({ token, onUploaded, onClaim }) {
@@ -154,18 +151,21 @@ export default function UploadView({ token, onUploaded, onClaim }) {
 
   async function startQrScan() {
     setClaimError('');
-    if (!('BarcodeDetector' in window)) {
-      setClaimError('QR scanning is not supported in this browser. Please paste the URL manually.');
+    const support = getScanSupportStatus(window);
+    if (!support.supported) {
+      setClaimError(support.message);
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const stream = await requestCameraStream(navigator.mediaDevices, buildCameraConstraints());
       streamRef.current = stream;
       setScanning(true);
       // Give React a tick to render the video element
       setTimeout(async () => {
         const video = videoRef.current;
         if (!video) { stopScanner(); return; }
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('webkit-playsinline', 'true');
         video.srcObject = stream;
         await video.play();
         // eslint-disable-next-line no-undef
@@ -189,7 +189,7 @@ export default function UploadView({ token, onUploaded, onClaim }) {
         scan();
       }, 100);
     } catch (err) {
-      setClaimError(err.name === 'NotAllowedError' ? 'Camera access denied. Please allow camera access and try again.' : 'Could not access camera.');
+      setClaimError(getCameraAccessErrorMessage(err));
       setScanning(false);
     }
   }

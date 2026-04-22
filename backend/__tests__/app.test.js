@@ -76,6 +76,30 @@ describe('auth routes', () => {
     expect(response.body.user.username).toBe('testuser');
   });
 
+  it('registers admin@apollon.care with admin role', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{
+        id: 'user-uuid-2',
+        username: 'adminuser',
+        email: 'admin@apollon.care',
+        preferences: {},
+        role: 'admin',
+        created_at: new Date(),
+      }],
+    });
+
+    const response = await request(app)
+      .post('/api/auth/register')
+      .send({ username: 'adminuser', email: 'admin@apollon.care', password: 'password123' });
+
+    expect(response.status).toBe(201);
+    expect(response.body.user.role).toBe('admin');
+    expect(db.query).toHaveBeenCalledWith(
+      expect.stringContaining('password_hash, role'),
+      ['adminuser', 'admin@apollon.care', 'hashed', 'admin'],
+    );
+  });
+
   it('rejects registration with short password', async () => {
     const response = await request(app)
       .post('/api/auth/register')
@@ -153,6 +177,57 @@ describe('auth routes', () => {
   it('returns 401 for DELETE /api/auth/me without token', async () => {
     const response = await request(app).delete('/api/auth/me');
     expect(response.status).toBe(401);
+  });
+
+  it('lists users for admin role', async () => {
+    const jwt = require('jsonwebtoken');
+    jwt.verify.mockReturnValueOnce({ userId: 'admin-id', username: 'admin', role: 'admin' });
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 'u1', username: 'alice', email: 'a@example.com', role: 'user', created_at: new Date() }],
+    });
+
+    const response = await request(app)
+      .get('/api/auth/users')
+      .set(AUTH_HEADER);
+
+    expect(response.status).toBe(200);
+    expect(response.body.users).toHaveLength(1);
+  });
+
+  it('rejects listing users for non-admin role', async () => {
+    const response = await request(app)
+      .get('/api/auth/users')
+      .set(AUTH_HEADER);
+
+    expect(response.status).toBe(403);
+  });
+
+  it('updates user role for admin role', async () => {
+    const jwt = require('jsonwebtoken');
+    jwt.verify.mockReturnValueOnce({ userId: 'admin-id', username: 'admin', role: 'admin' });
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 'u1', username: 'alice', email: 'a@example.com', preferences: {}, role: 'manager', created_at: new Date() }],
+    });
+
+    const response = await request(app)
+      .put('/api/auth/users/u1/role')
+      .set(AUTH_HEADER)
+      .send({ role: 'manager' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.role).toBe('manager');
+  });
+
+  it('prevents admin from removing own admin role', async () => {
+    const jwt = require('jsonwebtoken');
+    jwt.verify.mockReturnValueOnce({ userId: 'admin-id', username: 'admin', role: 'admin' });
+
+    const response = await request(app)
+      .put('/api/auth/users/admin-id/role')
+      .set(AUTH_HEADER)
+      .send({ role: 'user' });
+
+    expect(response.status).toBe(400);
   });
 });
 

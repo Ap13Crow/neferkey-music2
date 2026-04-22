@@ -1,9 +1,12 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
-const { signToken, requireAuth } = require('../auth');
+const {
+  signToken, requireAuth, requireRole, ROLES,
+} = require('../auth');
 
 const router = express.Router();
+const DEFAULT_ADMIN_EMAIL = 'admin@apollon.care';
 
 /**
  * @openapi
@@ -43,10 +46,12 @@ router.post('/register', async (req, res) => {
     return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
   try {
+    const normalizedEmail = email.trim().toLowerCase();
+    const role = normalizedEmail === DEFAULT_ADMIN_EMAIL ? ROLES.ADMIN : ROLES.USER;
     const hash = await bcrypt.hash(password, 12);
     const result = await db.query(
-      'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, preferences, role, created_at',
-      [username.trim(), email.trim().toLowerCase(), hash],
+      'INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, username, email, preferences, role, created_at',
+      [username.trim(), normalizedEmail, hash, role],
     );
     const user = result.rows[0];
     const token = signToken({ userId: user.id, username: user.username, role: user.role });
@@ -202,6 +207,85 @@ router.delete('/me', requireAuth, async (req, res) => {
     return res.status(204).send();
   } catch {
     return res.status(500).json({ error: 'Failed to delete account' });
+  }
+});
+
+/**
+ * @openapi
+ * /api/auth/users:
+ *   get:
+ *     tags: [Auth]
+ *     summary: List users (admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200: { description: User list }
+ *       401: { description: Unauthorized }
+ *       403: { description: Admin role required }
+ */
+router.get('/users', requireAuth, requireRole(ROLES.ADMIN), async (_req, res) => {
+  try {
+    const result = await db.query(
+      'SELECT id, username, email, role, created_at FROM users ORDER BY created_at DESC',
+    );
+    return res.json({ users: result.rows });
+  } catch {
+    return res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+/**
+ * @openapi
+ * /api/auth/users/{id}/role:
+ *   put:
+ *     tags: [Auth]
+ *     summary: Update a user role (admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [role]
+ *             properties:
+ *               role:
+ *                 type: string
+ *                 enum: [user, artist, composer, manager, admin]
+ *     responses:
+ *       200: { description: Updated user }
+ *       400: { description: Invalid role }
+ *       401: { description: Unauthorized }
+ *       403: { description: Admin role required }
+ *       404: { description: User not found }
+ */
+router.put('/users/:id/role', requireAuth, requireRole(ROLES.ADMIN), async (req, res) => {
+  const { id } = req.params;
+  const { role } = req.body;
+  const allowedRoles = Object.values(ROLES);
+  if (!role || !allowedRoles.includes(role)) {
+    return res.status(400).json({ error: `role must be one of: ${allowedRoles.join(', ')}` });
+  }
+  if (req.user.userId === id && role !== ROLES.ADMIN) {
+    return res.status(400).json({ error: 'Admin cannot remove own admin role' });
+  }
+  try {
+    const result = await db.query(
+      'UPDATE users SET role = $1 WHERE id = $2 RETURNING id, username, email, preferences, role, created_at',
+      [role, id],
+    );
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    return res.json(result.rows[0]);
+  } catch {
+    return res.status(500).json({ error: 'Failed to update role' });
   }
 });
 
