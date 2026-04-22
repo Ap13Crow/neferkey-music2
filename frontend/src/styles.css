@@ -258,6 +258,7 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
   flex-shrink: 0;
 }
 .player-mini-btn:hover { color: var(--text-primary); }
+.player-settings-btn { display: none; }
 /* Collapsed mini player — show only track snippet + play + chevron */
 .player-bar.mini .player-controls,
 .player-bar.mini .player-extras {
@@ -394,6 +395,20 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
   cursor: pointer;
 }
 .speed-select:focus { outline: 1px solid var(--accent); }
+.player-settings-popover {
+  display: none;
+  position: absolute;
+  right: 0.75rem;
+  bottom: calc(100% - var(--safe-bottom) + 0.4rem);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.6rem;
+  min-width: 170px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  z-index: 6;
+  gap: 0.55rem;
+}
 
 /* ─── Shared section layout ──────────────────────────────────── */
 .section-header {
@@ -884,6 +899,19 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
 }
 
 /* ─── Responsive (mobile) ────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .player-mini-btn { display: none; }
+  .player-bar { gap: 0.55rem; padding: 0 0.75rem var(--safe-bottom); }
+  .player-bar-track { display: none; }
+  .player-controls { flex: 1 1 auto; min-width: 0; gap: 0.3rem; }
+  .player-buttons { width: 100%; justify-content: center; gap: 0.35rem; }
+  .progress-row { display: none; }
+  .player-extras { display: none; }
+  .player-settings-btn { display: inline-flex; }
+  .player-settings-popover { display: flex; flex-direction: column; }
+  .player-settings-popover .volume-slider { width: 100px; }
+}
+
 @media (max-width: 640px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -944,24 +972,9 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
   /* Albums */
   .album-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
 
-  /* Player bar — full mode on mobile: tighter layout */
-  .player-bar { gap: 0.5rem; padding: 0 0.75rem var(--safe-bottom); }
-  .player-bar-track { min-width: 0; flex: 0 1 auto; max-width: 38%; }
-  .player-bar-cover, .player-bar-cover-placeholder { width: 38px; height: 38px; }
-  .player-bar-title { font-size: 0.8rem; }
-  .player-bar-artist { font-size: 0.7rem; }
-  .player-controls { min-width: 0; gap: 0.25rem; }
-  .progress-row { gap: 0.25rem; }
-  .progress-time { display: none; }
   .ctrl-btn { padding: 0.25rem; }
-  .player-extras { min-width: 0; gap: 0.3rem; max-width: none; }
-  .volume-slider { width: 48px; }
-  .speed-select { font-size: 0.68rem; padding: 0.15rem 0.3rem; }
-
-  /* Mini player on mobile */
-  .player-bar.mini { gap: 0.5rem; padding: 0 0.75rem var(--safe-bottom); }
-  .player-bar.mini .player-bar-cover,
-  .player-bar.mini .player-bar-cover-placeholder { width: 34px; height: 34px; }
+  .player-settings-popover { right: 0.5rem; min-width: 155px; }
+  .player-settings-popover .speed-select { font-size: 0.68rem; padding: 0.15rem 0.3rem; }
 
   /* Album detail */
   .album-detail-hero { flex-direction: column; align-items: flex-start; }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import jsQR from 'jsqr';
 import { IconUpload, IconTrash, IconNote, IconKey, IconCamera, IconLink, IconCheck } from './Icons';
 import {
   buildCameraConstraints,
@@ -168,23 +169,52 @@ export default function UploadView({ token, onUploaded, onClaim }) {
         video.setAttribute('webkit-playsinline', '');
         video.srcObject = stream;
         await video.play();
-        // eslint-disable-next-line no-undef
-        const detector = new BarcodeDetector({ formats: ['qr_code'] });
+        const hasBarcodeDetector = typeof window.BarcodeDetector === 'function';
+        const detector = hasBarcodeDetector
+          // eslint-disable-next-line no-undef
+          ? new BarcodeDetector({ formats: ['qr_code'] })
+          : null;
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
         function scan() {
-          detector.detect(video).then((codes) => {
-            if (codes.length > 0) {
-              const raw = codes[0].rawValue;
-              stopScanner();
-              const t = extractClaimToken(raw);
-              if (t) {
-                if (onClaim) onClaim(t);
+          if (detector) {
+            detector.detect(video).then((codes) => {
+              if (codes.length > 0) {
+                const raw = codes[0].rawValue;
+                stopScanner();
+                const t = extractClaimToken(raw);
+                if (t) {
+                  if (onClaim) onClaim(t);
+                } else {
+                  setClaimError(`QR code found but no claim token in URL: ${raw}`);
+                }
               } else {
-                setClaimError(`QR code found but no claim token in URL: ${raw}`);
+                scanLoopRef.current = requestAnimationFrame(scan);
               }
+            }).catch(() => { scanLoopRef.current = requestAnimationFrame(scan); });
+            return;
+          }
+          if (!ctx || !video.videoWidth || !video.videoHeight) {
+            scanLoopRef.current = requestAnimationFrame(scan);
+            return;
+          }
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(frame.data, canvas.width, canvas.height, { inversionAttempts: 'dontInvert' });
+          if (code?.data) {
+            const raw = code.data;
+            stopScanner();
+            const t = extractClaimToken(raw);
+            if (t) {
+              if (onClaim) onClaim(t);
             } else {
-              scanLoopRef.current = requestAnimationFrame(scan);
+              setClaimError(`QR code found but no claim token in URL: ${raw}`);
             }
-          }).catch(() => { scanLoopRef.current = requestAnimationFrame(scan); });
+          } else {
+            scanLoopRef.current = requestAnimationFrame(scan);
+          }
         }
         scan();
       }, 100);

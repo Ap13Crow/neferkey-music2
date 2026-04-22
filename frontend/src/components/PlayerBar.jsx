@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   IconPlay, IconPause, IconSkipBack, IconSkipForward,
   IconRewind, IconForward, IconVolume, IconNote,
-  IconChevronUp, IconChevronDown,
+  IconChevronUp, IconChevronDown, IconKebabVertical,
 } from './Icons';
 
 function fmt(seconds) {
@@ -20,6 +20,7 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
   const [volume, setVolume] = useState(1);
   const [speed, setSpeed] = useState(1);
   const [collapsed, setCollapsed] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const track = queue[currentIndex] || null;
 
@@ -151,17 +152,25 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
             <button className="ctrl-btn" title="Previous" onClick={() => onIndexChange((currentIndex - 1 + queue.length) % queue.length)}>
               <IconSkipBack size={18} />
             </button>
-            <button className="ctrl-btn" title="Rewind 10s" onClick={() => { if (audioRef.current) audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - 10); }}>
+            <button className="ctrl-btn" title="Rewind 15s" onClick={() => { if (audioRef.current) audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - 15); }}>
               <IconRewind size={16} />
             </button>
             <button className="ctrl-btn primary" title={playing ? 'Pause' : 'Play'} onClick={togglePlay}>
               {playing ? <IconPause size={18} /> : <IconPlay size={18} />}
             </button>
-            <button className="ctrl-btn" title="Forward 10s" onClick={() => { if (audioRef.current) audioRef.current.currentTime = Math.min(duration || 0, audioRef.current.currentTime + 10); }}>
+            <button className="ctrl-btn" title="Forward 15s" onClick={() => { if (audioRef.current) audioRef.current.currentTime = Math.min(duration || 0, audioRef.current.currentTime + 15); }}>
               <IconForward size={16} />
             </button>
             <button className="ctrl-btn" title="Next" onClick={() => onIndexChange((currentIndex + 1) % queue.length)}>
               <IconSkipForward size={18} />
+            </button>
+            <button
+              className="ctrl-btn player-settings-btn"
+              title="Playback settings"
+              aria-label="Playback settings"
+              onClick={() => setSettingsOpen((v) => !v)}
+            >
+              <IconKebabVertical size={16} />
             </button>
           </div>
 
@@ -203,6 +212,31 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
             <option value={2}>2×</option>
           </select>
         </div>
+
+        {settingsOpen && (
+          <div className="player-settings-popover">
+            <div className="volume-row">
+              <IconVolume size={16} />
+              <input
+                className="volume-slider"
+                type="range"
+                min={0}
+                max={1}
+                step={0.02}
+                value={volume}
+                onChange={(e) => setVolume(Number(e.target.value))}
+              />
+            </div>
+            <select className="speed-select" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
+              <option value={0.5}>0.5×</option>
+              <option value={0.75}>0.75×</option>
+              <option value={1}>1×</option>
+              <option value={1.25}>1.25×</option>
+              <option value={1.5}>1.5×</option>
+              <option value={2}>2×</option>
+            </select>
+          </div>
+        )}
       </div>
     </>
   );

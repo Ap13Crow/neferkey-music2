@@ -27,7 +27,15 @@ export default function AdminLinksView({ token, tracks, albums }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ resource_type: 'track', resource_key: '', label: '', expires_at: '' });
+  const [form, setForm] = useState({
+    resource_type: 'track',
+    resource_key: '',
+    label: '',
+    expires_at: '',
+    bulk: false,
+    count: 10,
+    target_user_id: '',
+  });
   const [copied, setCopied] = useState(null);
   const [formError, setFormError] = useState('');
   const [users, setUsers] = useState([]);
@@ -86,12 +94,23 @@ export default function AdminLinksView({ token, tracks, albums }) {
           resource_key: form.resource_key,
           label: form.label,
           expires_at: form.expires_at || undefined,
+          count: form.bulk ? Number(form.count) : 1,
+          target_user_id: form.target_user_id || undefined,
         }),
       });
       const data = await res.json();
       if (res.ok) {
-        setLinks((prev) => [data.link, ...prev]);
-        setForm({ resource_type: 'track', resource_key: '', label: '', expires_at: '' });
+        const createdLinks = data.links || (data.link ? [data.link] : []);
+        setLinks((prev) => [...createdLinks, ...prev]);
+        setForm((prev) => ({
+          ...prev,
+          resource_type: 'track',
+          resource_key: '',
+          label: '',
+          expires_at: '',
+          bulk: false,
+          count: 10,
+        }));
       } else {
         setFormError(data.error || 'Failed to create link');
       }
@@ -208,12 +227,55 @@ export default function AdminLinksView({ token, tracks, albums }) {
                 onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))}
               />
             </div>
+
+            <div className="form-group">
+              <label className="form-label">Assigned user (optional)</label>
+              <select
+                className="form-input speed-select"
+                style={{ fontSize: '0.84rem', padding: '0.55rem 0.75rem' }}
+                value={form.target_user_id}
+                onChange={(e) => setForm((f) => ({ ...f, target_user_id: e.target.value }))}
+              >
+                <option value="">Anyone can redeem</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.username} ({u.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', marginBottom: '0.85rem', flexWrap: 'wrap' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              <input
+                type="checkbox"
+                checked={form.bulk}
+                onChange={(e) => setForm((f) => ({ ...f, bulk: e.target.checked }))}
+                style={{ accentColor: 'var(--accent)' }}
+              />
+              Bulk generate
+            </label>
+            {form.bulk && (
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                Count
+                <input
+                  className="form-input"
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={form.count}
+                  onChange={(e) => setForm((f) => ({ ...f, count: e.target.value }))}
+                  style={{ width: 92, padding: '0.35rem 0.5rem', fontSize: '0.8rem' }}
+                />
+              </label>
+            )}
           </div>
 
           {formError && <div className="auth-error" style={{ marginBottom: '0.75rem' }}>{formError}</div>}
 
           <button className="btn btn-primary" type="submit" disabled={creating}>
-            <IconKey size={13} /> {creating ? 'Generating…' : 'Generate link'}
+            <IconKey size={13} /> {creating ? 'Generating…' : form.bulk ? 'Generate links' : 'Generate link'}
           </button>
         </form>
       </div>
@@ -265,6 +327,7 @@ export default function AdminLinksView({ token, tracks, albums }) {
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
                   Created {relTime(link.created_at)}
                   {link.used_by_username && ` · Used by ${link.used_by_username}`}
+                  {link.target_user_username && ` · Assigned to ${link.target_user_username}`}
                   {link.expires_at && !isExpired && ` · Expires ${new Date(link.expires_at).toLocaleDateString()}`}
                 </div>
               </div>

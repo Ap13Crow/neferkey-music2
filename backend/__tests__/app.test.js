@@ -424,6 +424,64 @@ describe('albums routes', () => {
   });
 });
 
+describe('purchase links routes', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('returns redeemed history for authenticated user', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 'p1', resource_type: 'album', resource_key: 'a1', purchased_at: new Date() }],
+    });
+
+    const response = await request(app)
+      .get('/api/purchase-links/redeemed')
+      .set(AUTH_HEADER);
+
+    expect(response.status).toBe(200);
+    expect(response.body.purchases).toHaveLength(1);
+  });
+
+  it('prevents redeeming a link assigned to another user', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{
+        id: 'link-1',
+        used_at: null,
+        expires_at: null,
+        target_user_id: 'different-user-id',
+        resource_type: 'track',
+        resource_key: 'demo-track-1',
+      }],
+    });
+
+    const response = await request(app)
+      .post('/api/purchase-links/token-abc/redeem')
+      .set(AUTH_HEADER);
+
+    expect(response.status).toBe(403);
+  });
+
+  it('supports admin bulk link generation', async () => {
+    const jwt = require('jsonwebtoken');
+    jwt.verify.mockReturnValueOnce({ userId: 'admin-id', username: 'admin', role: 'admin' });
+    db.query
+      .mockResolvedValueOnce({ rows: [{ url_key: 'demo-track-1' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'l1' }, { id: 'l2' }] });
+
+    const response = await request(app)
+      .post('/api/purchase-links')
+      .set(AUTH_HEADER)
+      .send({
+        resource_type: 'track',
+        resource_key: 'demo-track-1',
+        count: 2,
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.links).toHaveLength(2);
+  });
+});
+
 describe('roles middleware', () => {
   afterEach(() => {
     jest.clearAllMocks();
