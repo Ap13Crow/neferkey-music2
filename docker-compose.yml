@@ -18,6 +18,10 @@ services:
     environment:
       PORT: 3000
       DATABASE_URL: postgres://${POSTGRES_USER:-music}:${POSTGRES_PASSWORD:-music}@db:5432/${POSTGRES_DB:-music}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      UPLOADS_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -36,3 +40,4 @@ services:
 
 volumes:
   pgdata:
+  uploads:
