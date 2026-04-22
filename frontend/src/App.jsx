@@ -1,8 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import AuthScreen from './components/AuthScreen';
+import Sidebar from './components/Sidebar';
+import PlayerBar from './components/PlayerBar';
+import TrackList from './components/TrackList';
+import AlbumsView from './components/AlbumsView';
+import UploadView from './components/UploadView';
+import ProfileView from './components/ProfileView';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
-const fallbackRecords = [
+const DEMO_TRACKS = [
   {
     url_key: 'demo-track-1',
     album_key: 'demo-album',
@@ -11,6 +18,7 @@ const fallbackRecords = [
     audio_url: 'https://cdn.freesound.org/previews/431/431117_5121236-lq.mp3',
     image_url: 'https://picsum.photos/seed/demo1/600/600',
     lyrics: 'A gentle arpeggio introduces the harmony...',
+    genre: 'Classical',
   },
   {
     url_key: 'demo-track-2',
@@ -20,149 +28,168 @@ const fallbackRecords = [
     audio_url: 'https://cdn.freesound.org/previews/415/415209_5121236-lq.mp3',
     image_url: 'https://picsum.photos/seed/demo2/600/600',
     lyrics: 'Soft triplets unfold in the night...',
+    genre: 'Classical',
   },
 ];
 
 export default function App() {
-  const audioRef = useRef(null);
-  const [albumKey, setAlbumKey] = useState('demo-album');
-  const [urlKey, setUrlKey] = useState('demo-track-1');
-  const [records, setRecords] = useState(fallbackRecords);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [speed, setSpeed] = useState(1);
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(() => localStorage.getItem('nk_token') || null);
+  const [authVisible, setAuthVisible] = useState(false);
+  const [view, setView] = useState('library');
 
-  const currentTrack = useMemo(() => records[currentIndex] || fallbackRecords[0], [records, currentIndex]);
+  const [tracks, setTracks] = useState(DEMO_TRACKS);
+  const [albums, setAlbums] = useState([]);
 
+  const [queue, setQueue] = useState(DEMO_TRACKS);
+  const [queueIndex, setQueueIndex] = useState(0);
+
+  // Verify stored token and load user
   useEffect(() => {
-    if (!audioRef.current) {
-      return;
-    }
-    audioRef.current.playbackRate = speed;
-  }, [speed, currentTrack]);
+    if (!token) return;
+    fetch(`${API_BASE}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.ok ? r.json() : null)
+      .then((u) => { if (u) setUser(u); else logout(); })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  async function loadAlbum() {
+  const loadTracks = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/albums/${encodeURIComponent(albumKey)}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch album');
+      const res = await fetch(`${API_BASE}/tracks`);
+      if (res.ok) {
+        const data = await res.json();
+        const all = data.tracks.length > 0 ? data.tracks : DEMO_TRACKS;
+        setTracks(all);
+        setQueue(all);
       }
-      const data = await response.json();
-      setRecords(data.records.length > 0 ? data.records : fallbackRecords);
-      setCurrentIndex(0);
-    } catch {
-      setRecords(fallbackRecords);
-      setCurrentIndex(0);
-    }
-  }
+    } catch { /* use demo tracks */ }
+  }, []);
 
-  async function loadRecord() {
+  const loadAlbums = useCallback(async () => {
+    if (!token) { setAlbums([]); return; }
     try {
-      const response = await fetch(`${API_BASE}/records/${encodeURIComponent(urlKey)}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch record');
+      const res = await fetch(`${API_BASE}/albums`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setAlbums(data.albums || []);
       }
-      const data = await response.json();
-      setRecords([data]);
-      setCurrentIndex(0);
-    } catch {
-      setRecords(fallbackRecords);
-      setCurrentIndex(0);
+    } catch { /* ignore */ }
+  }, [token]);
+
+  useEffect(() => { loadTracks(); }, [loadTracks]);
+  useEffect(() => { loadAlbums(); }, [loadAlbums]);
+
+  function handleAuth(newUser, newToken) {
+    setUser(newUser);
+    setToken(newToken);
+    setAuthVisible(false);
+    loadAlbums();
+  }
+
+  function logout() {
+    localStorage.removeItem('nk_token');
+    setUser(null);
+    setToken(null);
+    setAlbums([]);
+  }
+
+  function handlePlayTracks(newQueue, index) {
+    setQueue(newQueue);
+    setQueueIndex(index);
+  }
+
+  function handleDeleteTrack(urlKey) {
+    if (!confirm('Delete this track permanently?')) return;
+    fetch(`${API_BASE}/tracks/${encodeURIComponent(urlKey)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    }).then((r) => { if (r.ok) loadTracks(); });
+  }
+
+  const currentTrack = queue[queueIndex] || null;
+
+  function renderContent() {
+    switch (view) {
+      case 'library':
+        return (
+          <div>
+            <div className="section-header">
+              <div>
+                <div className="section-title">Library</div>
+                <div className="section-subtitle">{tracks.length} tracks</div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {!user && (
+                  <button className="btn btn-secondary btn-sm" onClick={() => setAuthVisible(true)}>
+                    Sign in
+                  </button>
+                )}
+              </div>
+            </div>
+            <TrackList
+              tracks={tracks}
+              currentIndex={queue === tracks ? queueIndex : -1}
+              onPlay={(i) => handlePlayTracks(tracks, i)}
+              onDelete={token ? handleDeleteTrack : null}
+              showDelete={!!token}
+            />
+          </div>
+        );
+      case 'albums':
+        return (
+          <AlbumsView
+            albums={albums}
+            allTracks={tracks}
+            token={token}
+            onRefresh={() => { loadAlbums(); loadTracks(); }}
+            onPlayTracks={handlePlayTracks}
+            currentIndex={queueIndex}
+          />
+        );
+      case 'lyrics':
+        return (
+          <div>
+            <div className="section-header">
+              <div className="section-title">Lyrics</div>
+              {currentTrack && (
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  {currentTrack.title} — {currentTrack.artist}
+                </div>
+              )}
+            </div>
+            <div className="lyrics-panel">
+              {currentTrack?.lyrics
+                ? <span>{currentTrack.lyrics}</span>
+                : <span className="lyrics-empty">No lyrics available for this track.</span>}
+            </div>
+          </div>
+        );
+      case 'upload':
+        return <UploadView token={token} onUploaded={() => loadTracks()} />;
+      case 'profile':
+        return (
+          <ProfileView
+            user={user}
+            token={token}
+            onUserUpdate={setUser}
+            onLogout={logout}
+          />
+        );
+      default:
+        return null;
     }
   }
 
-  function play() {
-    audioRef.current?.play();
-  }
-
-  function pause() {
-    audioRef.current?.pause();
-  }
-
-  function stop() {
-    if (!audioRef.current) {
-      return;
-    }
-    audioRef.current.pause();
-    audioRef.current.currentTime = 0;
-  }
-
-  function rewind() {
-    if (!audioRef.current) {
-      return;
-    }
-    audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - 10);
-  }
-
-  function forward() {
-    if (!audioRef.current) {
-      return;
-    }
-    audioRef.current.currentTime = Math.min(audioRef.current.duration || 0, audioRef.current.currentTime + 10);
-  }
-
-  function replay() {
-    if (!audioRef.current) {
-      return;
-    }
-    audioRef.current.currentTime = 0;
-    audioRef.current.play();
-  }
-
-  function next() {
-    setCurrentIndex((index) => (index + 1) % records.length);
-  }
-
-  function previous() {
-    setCurrentIndex((index) => (index - 1 + records.length) % records.length);
+  if (authVisible) {
+    return <AuthScreen onAuth={handleAuth} />;
   }
 
   return (
-    <main className="player-layout">
-      <section className="card">
-        <h1>Neferkey Music Player</h1>
-        <p className="subtitle">Docker-ready • Cloud-native • Kubernetes compatible</p>
-
-        <div className="lookup-row">
-          <input value={albumKey} onChange={(e) => setAlbumKey(e.target.value)} placeholder="Album key" />
-          <button type="button" onClick={loadAlbum}>Load Album</button>
-        </div>
-        <div className="lookup-row">
-          <input value={urlKey} onChange={(e) => setUrlKey(e.target.value)} placeholder="Record URL key" />
-          <button type="button" onClick={loadRecord}>Load Record</button>
-        </div>
-
-        <img className="cover" src={currentTrack.image_url} alt={currentTrack.title} />
-        <h2>{currentTrack.title}</h2>
-        <p>{currentTrack.artist}</p>
-
-        <audio key={currentTrack.url_key} ref={audioRef} src={currentTrack.audio_url} preload="metadata" />
-
-        <div className="controls">
-          <button type="button" onClick={previous}>Prev</button>
-          <button type="button" onClick={rewind}>Rewind</button>
-          <button type="button" onClick={play}>Play</button>
-          <button type="button" onClick={pause}>Pause</button>
-          <button type="button" onClick={stop}>Stop</button>
-          <button type="button" onClick={forward}>Forward</button>
-          <button type="button" onClick={replay}>Replay</button>
-          <button type="button" onClick={next}>Next</button>
-        </div>
-
-        <label className="speed">
-          Speed
-          <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
-            <option value={0.75}>0.75x</option>
-            <option value={1}>1x</option>
-            <option value={1.25}>1.25x</option>
-            <option value={1.5}>1.5x</option>
-          </select>
-        </label>
-
-        <article className="lyrics">
-          <h3>Lyrics</h3>
-          <p>{currentTrack.lyrics}</p>
-        </article>
-      </section>
-    </main>
+    <div className="app-shell">
+      <Sidebar view={view} setView={setView} user={user} onLogout={logout} />
+      <main className="main-content">{renderContent()}</main>
+      <PlayerBar queue={queue} currentIndex={queueIndex} onIndexChange={setQueueIndex} />
+    </div>
   );
 }
