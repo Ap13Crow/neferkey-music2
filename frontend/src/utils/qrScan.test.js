@@ -10,6 +10,9 @@ import {
 
 test('extractClaimToken returns claim token from valid URL', () => {
   assert.equal(extractClaimToken('https://example.com/path?claim=abc123'), 'abc123');
+  assert.equal(extractClaimToken('https://example.com/path?x=1&claim=abc123&y=2'), 'abc123');
+  assert.equal(extractClaimToken('https://example.com/path?claim=abc123#section'), 'abc123');
+  assert.equal(extractClaimToken('https://example.com/path?claim=a%2Bb%3Dc'), 'a+b=c');
 });
 
 test('extractClaimToken returns null for invalid URL or missing claim', () => {
@@ -63,7 +66,11 @@ test('requestCameraStream retries through constraints until success', async () =
       return { id: 'stream-ok' };
     },
   };
-  const stream = await requestCameraStream(mediaDevices, [{ video: 1 }, { video: 2 }, { video: 3 }]);
+  const stream = await requestCameraStream(mediaDevices, [
+    { video: { facingMode: { ideal: 'environment' } } },
+    { video: { facingMode: 'environment' } },
+    { video: true },
+  ]);
   assert.equal(stream.id, 'stream-ok');
   assert.equal(call, 3);
 });

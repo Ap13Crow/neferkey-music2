@@ -100,6 +100,30 @@ describe('auth routes', () => {
     );
   });
 
+  it('registers ADMIN@APOLLON.CARE with normalized admin role', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{
+        id: 'user-uuid-3',
+        username: 'adminupper',
+        email: 'admin@apollon.care',
+        preferences: {},
+        role: 'admin',
+        created_at: new Date(),
+      }],
+    });
+
+    const response = await request(app)
+      .post('/api/auth/register')
+      .send({ username: 'adminupper', email: 'ADMIN@APOLLON.CARE', password: 'password123' });
+
+    expect(response.status).toBe(201);
+    expect(response.body.user.role).toBe('admin');
+    expect(db.query).toHaveBeenCalledWith(
+      expect.stringContaining('password_hash, role'),
+      ['adminupper', 'admin@apollon.care', 'hashed', 'admin'],
+    );
+  });
+
   it('rejects registration with short password', async () => {
     const response = await request(app)
       .post('/api/auth/register')

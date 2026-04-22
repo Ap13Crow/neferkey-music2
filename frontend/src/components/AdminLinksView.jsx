@@ -322,10 +322,11 @@ export default function AdminLinksView({ token, tracks, albums }) {
               </div>
             </div>
             <select
-              className="form-input speed-select"
+              className="form-input"
               style={{ fontSize: '0.8rem', padding: '0.4rem 0.55rem', minWidth: 110 }}
               value={u.role || 'user'}
               disabled={savingRoleId === u.id}
+              aria-label={`Role for ${u.username}`}
               onChange={(e) => handleRoleChange(u.id, e.target.value)}
             >
               <option value="user">user</option>

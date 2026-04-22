@@ -1,6 +1,6 @@
 export function extractClaimToken(url) {
   try {
-    const u = new URL(String(url || '').trim());
+    const u = new URL(String(url ?? '').trim());
     return u.searchParams.get('claim') || null;
   } catch {
     return null;

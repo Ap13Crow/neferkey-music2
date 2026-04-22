@@ -164,8 +164,8 @@ export default function UploadView({ token, onUploaded, onClaim }) {
       setTimeout(async () => {
         const video = videoRef.current;
         if (!video) { stopScanner(); return; }
-        video.setAttribute('playsinline', 'true');
-        video.setAttribute('webkit-playsinline', 'true');
+        video.playsInline = true;
+        video.setAttribute('webkit-playsinline', '');
         video.srcObject = stream;
         await video.play();
         // eslint-disable-next-line no-undef

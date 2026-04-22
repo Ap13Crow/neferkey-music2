@@ -1,12 +1,12 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
+const { DEFAULT_ADMIN_EMAIL } = require('../constants');
 const {
   signToken, requireAuth, requireRole, ROLES,
 } = require('../auth');
 
 const router = express.Router();
-const DEFAULT_ADMIN_EMAIL = 'admin@apollon.care';
 
 /**
  * @openapi
@@ -272,7 +272,9 @@ router.put('/users/:id/role', requireAuth, requireRole(ROLES.ADMIN), async (req,
   if (!role || !allowedRoles.includes(role)) {
     return res.status(400).json({ error: `role must be one of: ${allowedRoles.join(', ')}` });
   }
-  if (req.user.userId === id && role !== ROLES.ADMIN) {
+  const requesterId = String(req.user.userId ?? '').trim();
+  const targetId = String(id ?? '').trim();
+  if (requesterId === targetId && role !== ROLES.ADMIN) {
     return res.status(400).json({ error: 'Admin cannot remove own admin role' });
   }
   try {

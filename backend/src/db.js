@@ -1,4 +1,5 @@
 const { Pool } = require('pg');
+const { DEFAULT_ADMIN_EMAIL } = require('./constants');
 
 const connectionString = process.env.DATABASE_URL || 'postgres://music:music@localhost:5432/music';
 const pool = new Pool({ connectionString });
@@ -21,7 +22,8 @@ async function initDb() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'`);
   // Ensure designated admin account always has admin role
   await pool.query(
-    `UPDATE users SET role = 'admin' WHERE lower(email) = lower('admin@apollon.care')`,
+    `UPDATE users SET role = 'admin' WHERE lower(email) = lower($1)`,
+    [DEFAULT_ADMIN_EMAIL],
   );
 
   // Tracks table (keeps url_key for backwards compat)
