@@ -8,6 +8,7 @@ const db = require('./db');
 const authRouter = require('./routes/auth');
 const tracksRouter = require('./routes/tracks');
 const albumsRouter = require('./routes/albums');
+const purchaseLinksRouter = require('./routes/purchase-links');
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '../uploads');
 
@@ -142,8 +143,10 @@ app.use('/api/api/auth', authLimiter, authRouter);
 // Track + album routes
 app.use('/api/tracks', apiLimiter, tracksRouter);
 app.use('/api/albums', apiLimiter, albumsRouter);
+app.use('/api/purchase-links', apiLimiter, purchaseLinksRouter);
 app.use('/api/api/tracks', apiLimiter, tracksRouter);
 app.use('/api/api/albums', apiLimiter, albumsRouter);
+app.use('/api/api/purchase-links', apiLimiter, purchaseLinksRouter);
 
 /**
  * @openapi

@@ -1,5 +1,5 @@
 import {
-  IconMusic, IconAlbum, IconUpload, IconUser, IconLogout, IconLyrics,
+  IconMusic, IconAlbum, IconUpload, IconUser, IconLogout, IconLyrics, IconAdmin,
 } from './Icons';
 
 const NAV_ITEMS = [
@@ -11,6 +11,8 @@ const NAV_ITEMS = [
 ];
 
 export default function Sidebar({ view, setView, user, onLogout, isOpen }) {
+  const isAdmin = user?.role === 'admin';
+
   return (
     <aside className={`sidebar${isOpen ? ' open' : ''}`}>
       <div className="sidebar-logo">
@@ -32,6 +34,15 @@ export default function Sidebar({ view, setView, user, onLogout, isOpen }) {
             {label}
           </div>
         ))}
+        {isAdmin && (
+          <div
+            className={`sidebar-item${view === 'admin' ? ' active' : ''}`}
+            onClick={() => setView('admin')}
+          >
+            <IconAdmin size={16} />
+            Admin
+          </div>
+        )}
       </div>
 
       {user && (

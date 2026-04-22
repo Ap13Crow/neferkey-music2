@@ -8,6 +8,8 @@ import AlbumsView from './components/AlbumsView';
 import UploadView from './components/UploadView';
 import ProfileView from './components/ProfileView';
 import ConfirmModal from './components/ConfirmModal';
+import ClaimModal from './components/ClaimModal';
+import AdminLinksView from './components/AdminLinksView';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
@@ -40,7 +42,21 @@ const VIEW_TITLES = {
   lyrics: 'Lyrics',
   upload: 'Upload',
   profile: 'Profile',
+  admin: 'Admin',
 };
+
+/** Extract a claim token from the current page URL (?claim=TOKEN) */
+function getClaimTokenFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('claim') || null;
+}
+
+/** Remove ?claim= from the browser URL without reloading */
+function clearClaimFromUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete('claim');
+  window.history.replaceState({}, '', url.toString());
+}
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -59,6 +75,19 @@ export default function App() {
 
   const [confirmDeleteTrack, setConfirmDeleteTrack] = useState(null);
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
+
+  // Purchase link claim flow
+  const [claimToken, setClaimToken] = useState(null);
+  const [pendingClaimToken, setPendingClaimToken] = useState(null);
+
+  // On mount: check URL for ?claim= token
+  useEffect(() => {
+    const t = getClaimTokenFromUrl();
+    if (t) {
+      clearClaimFromUrl();
+      setClaimToken(t);
+    }
+  }, []);
 
   // Verify stored token and load user
   useEffect(() => {
@@ -102,6 +131,11 @@ export default function App() {
     setToken(newToken);
     setAuthVisible(false);
     loadAlbums();
+    // If user signed in to complete a pending claim, open the modal now
+    if (pendingClaimToken) {
+      setClaimToken(pendingClaimToken);
+      setPendingClaimToken(null);
+    }
   }
 
   function logout() {
@@ -150,6 +184,17 @@ export default function App() {
   function openRegister() {
     setAuthDefaultTab('register');
     setAuthVisible(true);
+  }
+
+  // When a claim token is triggered from UploadView or URL
+  function handleClaim(t) {
+    if (!user) {
+      // Save token and prompt login first
+      setPendingClaimToken(t);
+      openSignIn();
+    } else {
+      setClaimToken(t);
+    }
   }
 
   const currentTrack = queue[queueIndex] || null;
@@ -204,7 +249,7 @@ export default function App() {
           </div>
         );
       case 'upload':
-        return <UploadView token={token} onUploaded={() => loadTracks()} />;
+        return <UploadView token={token} onUploaded={() => loadTracks()} onClaim={handleClaim} />;
       case 'profile':
         return (
           <ProfileView
@@ -214,6 +259,10 @@ export default function App() {
             onLogout={logout}
           />
         );
+      case 'admin':
+        return user?.role === 'admin' ? (
+          <AdminLinksView token={token} tracks={tracks} albums={albums} />
+        ) : null;
       default:
         return null;
     }
@@ -262,6 +311,20 @@ export default function App() {
         onIndexChange={setQueueIndex}
         playIntent={playIntent}
       />
+
+      {claimToken && (
+        <ClaimModal
+          token={claimToken}
+          user={user}
+          onSignIn={() => {
+            setPendingClaimToken(claimToken);
+            setClaimToken(null);
+            openSignIn();
+          }}
+          onClaimed={() => { loadTracks(); loadAlbums(); }}
+          onClose={() => setClaimToken(null)}
+        />
+      )}
 
       {confirmDeleteTrack && (
         <ConfirmModal

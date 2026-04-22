@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { IconUpload, IconTrash, IconNote } from './Icons';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { IconUpload, IconTrash, IconNote, IconKey, IconCamera, IconLink, IconCheck } from './Icons';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const AUDIO_EXTS = ['.mp3', '.flac', '.ogg', '.wav', '.aac', '.m4a', '.opus'];
@@ -9,20 +9,14 @@ function extOf(name) {
   return name.slice(name.lastIndexOf('.')).toLowerCase();
 }
 
-/** Best-effort metadata extraction from an audio filename. */
 function parseFilename(filename) {
   const base = filename.slice(0, filename.lastIndexOf('.'));
-
   let title = base;
   let artist = '';
   let track_number = '';
-
-  // Strip leading track number: "01 ", "01. ", "01 - "
   const numMatch = base.match(/^(\d{1,3})[.\s-]+\s*(.+)$/);
   const rest = numMatch ? numMatch[2].trim() : base;
   if (numMatch) track_number = String(parseInt(numMatch[1], 10));
-
-  // "Artist - Title" split
   const dashIdx = rest.indexOf(' - ');
   if (dashIdx !== -1) {
     artist = rest.slice(0, dashIdx).trim();
@@ -30,7 +24,6 @@ function parseFilename(filename) {
   } else {
     title = rest.trim();
   }
-
   return { title, artist, track_number };
 }
 
@@ -42,15 +35,28 @@ function makeItem(file) {
     file,
     imageFile: null,
     form: { title, artist, genre: '', year: '', track_number, lyrics: '' },
-    status: null,   // null | 'uploading' | 'success' | 'error'
+    status: null,
     message: '',
   };
 }
 
-export default function UploadView({ token, onUploaded }) {
+/** Extract a claim token from a URL string */
+function extractClaimToken(url) {
+  try {
+    const u = new URL(url.trim());
+    return u.searchParams.get('claim') || null;
+  } catch {
+    return null;
+  }
+}
+
+export default function UploadView({ token, onUploaded, onClaim }) {
   const audioInputRef = useRef(null);
   const [items, setItems] = useState([]);
   const [dragging, setDragging] = useState(false);
+  const [claimUrl, setClaimUrl] = useState('');
+  const [claimError, setClaimError] = useState('');
+  const [scanning, setScanning] = useState(false);
 
   function addFiles(files) {
     const audioFiles = Array.from(files).filter((f) => AUDIO_EXTS.includes(extOf(f.name)));
@@ -81,7 +87,6 @@ export default function UploadView({ token, onUploaded }) {
       return false;
     }
     setItemStatus(item.id, 'uploading', 'Uploading…');
-
     const data = new FormData();
     data.append('audio', file);
     if (imageFile) data.append('image', imageFile);
@@ -91,7 +96,6 @@ export default function UploadView({ token, onUploaded }) {
     if (form.year) data.append('year', form.year);
     if (form.track_number) data.append('track_number', form.track_number);
     if (form.lyrics) data.append('lyrics', form.lyrics.trim());
-
     try {
       const res = await fetch(`${API_BASE}/tracks/upload`, {
         method: 'POST',
@@ -99,10 +103,7 @@ export default function UploadView({ token, onUploaded }) {
         body: data,
       });
       const result = await res.json();
-      if (!res.ok) {
-        setItemStatus(item.id, 'error', result.error || 'Upload failed');
-        return false;
-      }
+      if (!res.ok) { setItemStatus(item.id, 'error', result.error || 'Upload failed'); return false; }
       setItemStatus(item.id, 'success', `"${result.title}" uploaded!`);
       if (onUploaded) onUploaded(result);
       return true;
@@ -126,6 +127,73 @@ export default function UploadView({ token, onUploaded }) {
     addFiles(e.dataTransfer.files);
   }
 
+  function handleClaimSubmit(e) {
+    e.preventDefault();
+    setClaimError('');
+    const t = extractClaimToken(claimUrl);
+    if (!t) {
+      setClaimError('No valid claim token found in that URL.');
+      return;
+    }
+    if (onClaim) onClaim(t);
+    setClaimUrl('');
+  }
+
+  // QR scanner using BarcodeDetector API + camera
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const scanLoopRef = useRef(null);
+
+  const stopScanner = useCallback(() => {
+    if (scanLoopRef.current) { cancelAnimationFrame(scanLoopRef.current); scanLoopRef.current = null; }
+    if (streamRef.current) { streamRef.current.getTracks().forEach((t) => t.stop()); streamRef.current = null; }
+    setScanning(false);
+  }, []);
+
+  useEffect(() => () => stopScanner(), [stopScanner]);
+
+  async function startQrScan() {
+    setClaimError('');
+    if (!('BarcodeDetector' in window)) {
+      setClaimError('QR scanning is not supported in this browser. Please paste the URL manually.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      streamRef.current = stream;
+      setScanning(true);
+      // Give React a tick to render the video element
+      setTimeout(async () => {
+        const video = videoRef.current;
+        if (!video) { stopScanner(); return; }
+        video.srcObject = stream;
+        await video.play();
+        // eslint-disable-next-line no-undef
+        const detector = new BarcodeDetector({ formats: ['qr_code'] });
+        function scan() {
+          detector.detect(video).then((codes) => {
+            if (codes.length > 0) {
+              const raw = codes[0].rawValue;
+              stopScanner();
+              const t = extractClaimToken(raw);
+              if (t) {
+                if (onClaim) onClaim(t);
+              } else {
+                setClaimError(`QR code found but no claim token in URL: ${raw}`);
+              }
+            } else {
+              scanLoopRef.current = requestAnimationFrame(scan);
+            }
+          }).catch(() => { scanLoopRef.current = requestAnimationFrame(scan); });
+        }
+        scan();
+      }, 100);
+    } catch (err) {
+      setClaimError(err.name === 'NotAllowedError' ? 'Camera access denied. Please allow camera access and try again.' : 'Could not access camera.');
+      setScanning(false);
+    }
+  }
+
   const hasPending = items.some((it) => it.status !== 'success');
 
   if (!token) {
@@ -137,7 +205,22 @@ export default function UploadView({ token, onUploaded }) {
             <div className="section-subtitle">Add music to your library</div>
           </div>
         </div>
-        <div className="empty-state">
+
+        {/* Redeem section — available without login for preview, login needed to claim */}
+        <RedeemSection
+          claimUrl={claimUrl}
+          setClaimUrl={setClaimUrl}
+          claimError={claimError}
+          setClaimError={setClaimError}
+          scanning={scanning}
+          videoRef={videoRef}
+          onSubmit={handleClaimSubmit}
+          onScan={startQrScan}
+          onStopScan={stopScanner}
+          loggedIn={false}
+        />
+
+        <div className="empty-state" style={{ marginTop: '1rem' }}>
           <IconUpload size={48} />
           <h3>Sign in to upload</h3>
           <p>You need to be signed in to upload tracks to your library.</p>
@@ -196,6 +279,90 @@ export default function UploadView({ token, onUploaded }) {
           ))}
         </div>
       )}
+
+      {/* Redeem purchase link section */}
+      <RedeemSection
+        claimUrl={claimUrl}
+        setClaimUrl={setClaimUrl}
+        claimError={claimError}
+        setClaimError={setClaimError}
+        scanning={scanning}
+        videoRef={videoRef}
+        onSubmit={handleClaimSubmit}
+        onScan={startQrScan}
+        onStopScan={stopScanner}
+        loggedIn={true}
+      />
+    </div>
+  );
+}
+
+function RedeemSection({ claimUrl, setClaimUrl, claimError, setClaimError, scanning, videoRef, onSubmit, onScan, onStopScan, loggedIn }) {
+  return (
+    <div style={{ marginTop: '1.5rem', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '1.25rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.85rem' }}>
+        <IconKey size={16} />
+        <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Redeem Purchase Link</span>
+      </div>
+      <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '0.85rem' }}>
+        Paste a purchase URL below, or scan its QR code to add a track or album to your library.
+      </p>
+
+      {/* Camera viewfinder */}
+      {scanning && (
+        <div style={{ position: 'relative', marginBottom: '0.85rem', borderRadius: 'var(--radius-md)', overflow: 'hidden', background: '#000', maxWidth: 320, aspectRatio: '4/3' }}>
+          <video
+            ref={videoRef}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            playsInline
+            muted
+          />
+          <div style={{ position: 'absolute', inset: 0, border: '3px solid var(--accent)', borderRadius: 'var(--radius-md)', pointerEvents: 'none' }} />
+          <button
+            className="btn btn-secondary btn-sm"
+            style={{ position: 'absolute', top: '0.5rem', right: '0.5rem' }}
+            onClick={onStopScan}
+          >
+            Cancel
+          </button>
+          <div style={{ position: 'absolute', bottom: '0.5rem', left: 0, right: 0, textAlign: 'center', fontSize: '0.75rem', color: '#fff' }}>
+            Point camera at QR code
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={onSubmit} style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <input
+            className="form-input"
+            style={{ width: '100%' }}
+            placeholder="https://…?claim=abc123"
+            value={claimUrl}
+            onChange={(e) => { setClaimUrl(e.target.value); setClaimError(''); }}
+          />
+        </div>
+        <button className="btn btn-primary" type="submit" disabled={!claimUrl.trim()}>
+          <IconLink size={13} /> Redeem
+        </button>
+        <button
+          className="btn btn-secondary"
+          type="button"
+          onClick={scanning ? onStopScan : onScan}
+          title={scanning ? 'Stop scanner' : 'Scan QR code with camera'}
+        >
+          <IconCamera size={13} /> {scanning ? 'Stop scan' : 'Scan QR'}
+        </button>
+      </form>
+
+      {claimError && (
+        <div className="auth-error" style={{ marginTop: '0.65rem' }}>{claimError}</div>
+      )}
+
+      {!loggedIn && (
+        <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+          You will be prompted to sign in before the link is redeemed.
+        </p>
+      )}
     </div>
   );
 }
@@ -203,7 +370,6 @@ export default function UploadView({ token, onUploaded }) {
 function UploadItem({ item, onRemove, onFormChange, onImageChange, onUpload }) {
   const imageRef = useRef(null);
   const { file, form, imageFile, status, message } = item;
-
   const isDone = status === 'success';
   const isUploading = status === 'uploading';
 
@@ -217,11 +383,7 @@ function UploadItem({ item, onRemove, onFormChange, onImageChange, onUpload }) {
         </div>
         <div style={{ display: 'flex', gap: '0.4rem' }}>
           {!isDone && (
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={onUpload}
-              disabled={isUploading}
-            >
+            <button className="btn btn-primary btn-sm" onClick={onUpload} disabled={isUploading}>
               <IconUpload size={12} /> {isUploading ? 'Uploading…' : 'Upload'}
             </button>
           )}
@@ -233,7 +395,7 @@ function UploadItem({ item, onRemove, onFormChange, onImageChange, onUpload }) {
 
       {status && (
         <div className={`upload-progress ${status === 'success' ? 'upload-success' : status === 'error' ? 'upload-error' : ''}`}>
-          {message}
+          {status === 'success' && <IconCheck size={12} style={{ marginRight: 4 }} />}{message}
         </div>
       )}
 

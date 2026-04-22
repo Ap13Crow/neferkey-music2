@@ -82,6 +82,38 @@ async function initDb() {
     );
   `);
 
+  // Purchase links — admin-generated one-time-use tokens
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS purchase_links (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      token TEXT UNIQUE NOT NULL,
+      resource_type TEXT NOT NULL CHECK (resource_type IN ('track', 'album')),
+      resource_key TEXT NOT NULL,
+      label TEXT NOT NULL DEFAULT '',
+      created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      used_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      used_at TIMESTAMPTZ,
+      expires_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // User purchases — access grants from redeemed purchase links
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_purchases (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      resource_type TEXT NOT NULL CHECK (resource_type IN ('track', 'album')),
+      resource_key TEXT NOT NULL,
+      purchase_link_id UUID REFERENCES purchase_links(id) ON DELETE SET NULL,
+      purchased_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, resource_type, resource_key)
+    );
+  `);
+
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_purchase_links_token ON purchase_links (token);');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_user_purchases_user ON user_purchases (user_id);');
+
   // Demo seed data
   await pool.query(`
     INSERT INTO records (url_key, album_key, title, artist, audio_url, image_url, lyrics, is_public)

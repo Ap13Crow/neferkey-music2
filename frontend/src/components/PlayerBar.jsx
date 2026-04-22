@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   IconPlay, IconPause, IconSkipBack, IconSkipForward,
   IconRewind, IconForward, IconVolume, IconNote,
+  IconChevronUp, IconChevronDown,
 } from './Icons';
 
 function fmt(seconds) {
@@ -18,6 +19,7 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [speed, setSpeed] = useState(1);
+  const [collapsed, setCollapsed] = useState(false);
 
   const track = queue[currentIndex] || null;
 
@@ -34,7 +36,6 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
   }, [volume]);
 
   // Reload audio source whenever the track changes.
-  // Actual playback start is driven by playIntent (see below).
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !track) return;
@@ -44,10 +45,10 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [track?.url_key]);
 
-  // Auto-start playback whenever an explicit play intent is signalled
-  // (e.g. clicking "play" on a track row or album play-all button).
+  // Auto-start playback on explicit play intent; auto-expand if collapsed.
   useEffect(() => {
     if (!playIntent) return;
+    setCollapsed(false);
     const audio = audioRef.current;
     if (!audio) return;
 
@@ -64,6 +65,11 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
     }
     return undefined;
   }, [playIntent]);
+
+  // Auto-expand whenever playback starts
+  useEffect(() => {
+    if (playing) setCollapsed(false);
+  }, [playing]);
 
   function togglePlay() {
     const audio = audioRef.current;
@@ -108,7 +114,17 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
         />
       )}
 
-      <div className="player-bar">
+      <div className={`player-bar${collapsed ? ' mini' : ''}`}>
+        {/* Collapse/expand toggle */}
+        <button
+          className="player-mini-btn"
+          onClick={() => setCollapsed((c) => !c)}
+          title={collapsed ? 'Expand player' : 'Collapse player'}
+          aria-label={collapsed ? 'Expand player' : 'Collapse player'}
+        >
+          {collapsed ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
+        </button>
+
         {/* Track info */}
         <div className="player-bar-track">
           {track?.image_url ? (
@@ -122,7 +138,14 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
           </div>
         </div>
 
-        {/* Controls */}
+        {/* Play/pause always visible (even in mini) */}
+        {collapsed && (
+          <button className="ctrl-btn primary" title={playing ? 'Pause' : 'Play'} onClick={togglePlay} style={{ flexShrink: 0 }}>
+            {playing ? <IconPause size={18} /> : <IconPlay size={18} />}
+          </button>
+        )}
+
+        {/* Full controls — hidden when collapsed */}
         <div className="player-controls">
           <div className="player-buttons">
             <button className="ctrl-btn" title="Previous" onClick={() => onIndexChange((currentIndex - 1 + queue.length) % queue.length)}>

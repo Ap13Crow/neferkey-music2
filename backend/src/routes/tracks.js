@@ -73,14 +73,21 @@ const upload = multer({
  */
 router.get('/', async (req, res) => {
   try {
-    // When a valid auth token is present, return only the owner's tracks.
+    // When a valid auth token is present, return owned + purchased tracks.
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
         const { verifyToken } = require('../auth');
         const payload = verifyToken(authHeader.slice(7));
         const result = await db.query(
-          'SELECT * FROM records WHERE owner_id = $1 ORDER BY created_at DESC, url_key',
+          `SELECT r.* FROM records r
+           WHERE r.owner_id = $1
+           UNION
+           SELECT r.* FROM records r
+           INNER JOIN user_purchases up ON up.resource_key = r.url_key
+             AND up.resource_type = 'track'
+             AND up.user_id = $1
+           ORDER BY created_at DESC, url_key`,
           [payload.userId],
         );
         return res.json({ tracks: result.rows });
