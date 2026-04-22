@@ -4,6 +4,7 @@ const db = require('../db');
 const { requireAuth, requireRole, ROLES } = require('../auth');
 
 const router = express.Router();
+const PARAMS_PER_LINK = 7;
 
 /**
  * @openapi
@@ -77,7 +78,7 @@ router.post('/', requireAuth, requireRole(ROLES.ADMIN), async (req, res) => {
     const placeholders = [];
     for (let i = 0; i < normalizedCount; i += 1) {
       const token = crypto.randomBytes(20).toString('hex');
-      const placeholderBase = i * 7;
+      const placeholderBase = i * PARAMS_PER_LINK;
       placeholders.push(`($${placeholderBase + 1}, $${placeholderBase + 2}, $${placeholderBase + 3}, $${placeholderBase + 4}, $${placeholderBase + 5}, $${placeholderBase + 6}, $${placeholderBase + 7})`);
       values.push(
         token,

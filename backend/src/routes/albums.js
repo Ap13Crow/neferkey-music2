@@ -35,7 +35,7 @@ router.get('/', requireAuth, async (req, res) => {
            json_agg(r.* ORDER BY at.position)
            FILTER (WHERE r.url_key IS NOT NULL), '[]'
          ) AS tracks,
-         (a.owner_id <> $1) AS is_purchased,
+         (a.owner_id = $1) AS is_owned,
          up.purchased_at
         FROM albums a
        LEFT JOIN user_purchases up
