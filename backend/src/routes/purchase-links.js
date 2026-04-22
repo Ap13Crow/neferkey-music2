@@ -79,8 +79,8 @@ router.post('/', requireAuth, requireRole(ROLES.ADMIN), async (req, res) => {
     const placeholders = [];
     for (let i = 0; i < normalizedCount; i += 1) {
       const token = crypto.randomBytes(20).toString('hex');
-      const placeholderBase = i * PARAMS_PER_LINK;
-      placeholders.push(`($${placeholderBase + 1}, $${placeholderBase + 2}, $${placeholderBase + 3}, $${placeholderBase + 4}, $${placeholderBase + 5}, $${placeholderBase + 6}, $${placeholderBase + 7})`);
+      const paramOffset = i * PARAMS_PER_LINK;
+      placeholders.push(`($${paramOffset + 1}, $${paramOffset + 2}, $${paramOffset + 3}, $${paramOffset + 4}, $${paramOffset + 5}, $${paramOffset + 6}, $${paramOffset + 7})`);
       values.push(
         token,
         resource_type,
