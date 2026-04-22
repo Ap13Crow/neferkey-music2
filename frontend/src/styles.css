@@ -1,0 +1,86 @@
+:root {
+  font-family: Inter, system-ui, sans-serif;
+  color: #111827;
+  background: #f8fafc;
+}
+
+body {
+  margin: 0;
+}
+
+.player-layout {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.card {
+  width: min(820px, 100%);
+  background: white;
+  border-radius: 1rem;
+  padding: 1rem;
+  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.12);
+}
+
+.subtitle {
+  color: #475569;
+  margin-top: -0.4rem;
+}
+
+.lookup-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.lookup-row input {
+  flex: 1;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  padding: 0.55rem;
+}
+
+button,
+select {
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+  background: #0f172a;
+  color: white;
+  padding: 0.45rem 0.75rem;
+}
+
+.cover {
+  width: min(340px, 100%);
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 0.75rem;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lyrics {
+  margin-top: 0.75rem;
+  color: #1e293b;
+}
+
+@media (max-width: 640px) {
+  .card {
+    padding: 0.75rem;
+  }
+
+  .lookup-row {
+    flex-direction: column;
+  }
+}
