@@ -11,7 +11,7 @@ function fmt(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export default function PlayerBar({ queue, currentIndex, onIndexChange }) {
+export default function PlayerBar({ queue, currentIndex, onIndexChange, playIntent }) {
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -33,13 +33,37 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange }) {
     audio.volume = volume;
   }, [volume]);
 
+  // Reload audio source whenever the track changes.
+  // Actual playback start is driven by playIntent (see below).
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !track) return;
     audio.load();
-    if (playing) audio.play().catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [track]);
+    setCurrentTime(0);
+    setDuration(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [track?.url_key]);
+
+  // Auto-start playback whenever an explicit play intent is signalled
+  // (e.g. clicking "play" on a track row or album play-all button).
+  useEffect(() => {
+    if (!playIntent) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const doPlay = () => {
+      audio.play().catch(() => {});
+      setPlaying(true);
+    };
+
+    if (audio.readyState >= 2) {
+      doPlay();
+    } else {
+      audio.addEventListener('canplay', doPlay, { once: true });
+      return () => audio.removeEventListener('canplay', doPlay);
+    }
+    return undefined;
+  }, [playIntent]);
 
   function togglePlay() {
     const audio = audioRef.current;

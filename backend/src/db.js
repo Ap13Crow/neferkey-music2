@@ -12,9 +12,13 @@ async function initDb() {
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       preferences JSONB NOT NULL DEFAULT '{}',
+      role TEXT NOT NULL DEFAULT 'user',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+
+  // Add role column for existing deployments
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'`);
 
   // Tracks table (keeps url_key for backwards compat)
   await pool.query(`

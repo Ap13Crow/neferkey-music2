@@ -11,7 +11,7 @@ jest.mock('bcryptjs', () => ({
 
 jest.mock('jsonwebtoken', () => ({
   sign: jest.fn().mockReturnValue('mock-token'),
-  verify: jest.fn().mockReturnValue({ userId: 'user-uuid-1', username: 'testuser' }),
+  verify: jest.fn().mockReturnValue({ userId: 'user-uuid-1', username: 'testuser', role: 'user' }),
 }));
 
 const db = require('../src/db');
@@ -64,7 +64,7 @@ describe('auth routes', () => {
 
   it('registers a new user', async () => {
     db.query.mockResolvedValueOnce({
-      rows: [{ id: 'user-uuid-1', username: 'testuser', email: 'test@example.com', preferences: {}, created_at: new Date() }],
+      rows: [{ id: 'user-uuid-1', username: 'testuser', email: 'test@example.com', preferences: {}, role: 'user', created_at: new Date() }],
     });
 
     const response = await request(app)
@@ -88,7 +88,7 @@ describe('auth routes', () => {
     db.query.mockResolvedValueOnce({
       rows: [{
         id: 'user-uuid-1', username: 'testuser', email: 'test@example.com',
-        password_hash: 'hashed', preferences: {}, created_at: new Date(),
+        password_hash: 'hashed', preferences: {}, role: 'user', created_at: new Date(),
       }],
     });
 
@@ -107,7 +107,7 @@ describe('auth routes', () => {
     db.query.mockResolvedValueOnce({
       rows: [{
         id: 'user-uuid-1', username: 'testuser', email: 'test@example.com',
-        password_hash: 'hashed', preferences: {}, created_at: new Date(),
+        password_hash: 'hashed', preferences: {}, role: 'user', created_at: new Date(),
       }],
     });
 
@@ -125,7 +125,7 @@ describe('auth routes', () => {
 
   it('returns current user for GET /api/auth/me with valid token', async () => {
     db.query.mockResolvedValueOnce({
-      rows: [{ id: 'user-uuid-1', username: 'testuser', email: 'test@example.com', preferences: {}, created_at: new Date() }],
+      rows: [{ id: 'user-uuid-1', username: 'testuser', email: 'test@example.com', preferences: {}, role: 'user', created_at: new Date() }],
     });
 
     const response = await request(app)
@@ -135,6 +135,25 @@ describe('auth routes', () => {
     expect(response.status).toBe(200);
     expect(response.body.username).toBe('testuser');
   });
+
+  it('deletes current user account', async () => {
+    db.query.mockResolvedValueOnce({ rows: [] });
+
+    const response = await request(app)
+      .delete('/api/auth/me')
+      .set(AUTH_HEADER);
+
+    expect(response.status).toBe(204);
+    expect(db.query).toHaveBeenCalledWith(
+      'DELETE FROM users WHERE id = $1',
+      ['user-uuid-1'],
+    );
+  });
+
+  it('returns 401 for DELETE /api/auth/me without token', async () => {
+    const response = await request(app).delete('/api/auth/me');
+    expect(response.status).toBe(401);
+  });
 });
 
 describe('tracks routes', () => {
@@ -142,7 +161,7 @@ describe('tracks routes', () => {
     jest.clearAllMocks();
   });
 
-  it('lists all tracks', async () => {
+  it('lists all tracks when unauthenticated', async () => {
     db.query.mockResolvedValueOnce({
       rows: [
         { url_key: 'demo-track-1', title: 'Prelude in C Major' },
@@ -154,6 +173,25 @@ describe('tracks routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.tracks).toHaveLength(2);
+  });
+
+  it('lists only own tracks when authenticated', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ url_key: 'my-track-1', title: 'My Track', owner_id: 'user-uuid-1' }],
+    });
+
+    const response = await request(app)
+      .get('/api/tracks')
+      .set(AUTH_HEADER);
+
+    expect(response.status).toBe(200);
+    expect(response.body.tracks).toHaveLength(1);
+    expect(response.body.tracks[0].url_key).toBe('my-track-1');
+    // Verify user-scoped query was used
+    expect(db.query).toHaveBeenCalledWith(
+      expect.stringContaining('owner_id'),
+      ['user-uuid-1'],
+    );
   });
 
   it('returns 401 when uploading without auth', async () => {
@@ -284,5 +322,52 @@ describe('albums routes', () => {
       .set(AUTH_HEADER);
 
     expect(response.status).toBe(204);
+  });
+});
+
+describe('roles middleware', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('exports requireRole function', () => {
+    const { requireRole, ROLES } = require('../src/auth');
+    expect(typeof requireRole).toBe('function');
+    expect(ROLES.USER).toBe('user');
+    expect(ROLES.ADMIN).toBe('admin');
+    expect(ROLES.ARTIST).toBe('artist');
+    expect(ROLES.MANAGER).toBe('manager');
+    expect(ROLES.COMPOSER).toBe('composer');
+  });
+
+  it('requireRole allows user with matching role', () => {
+    const { requireRole } = require('../src/auth');
+    const middleware = requireRole('user');
+    const req = { user: { userId: 'u1', role: 'user' } };
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    middleware(req, res, next);
+    expect(next).toHaveBeenCalled();
+  });
+
+  it('requireRole rejects user with wrong role', () => {
+    const { requireRole } = require('../src/auth');
+    const middleware = requireRole('admin');
+    const req = { user: { userId: 'u1', role: 'user' } };
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    middleware(req, res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  it('requireRole always allows admin', () => {
+    const { requireRole } = require('../src/auth');
+    const middleware = requireRole('artist');
+    const req = { user: { userId: 'u1', role: 'admin' } };
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    middleware(req, res, next);
+    expect(next).toHaveBeenCalled();
   });
 });

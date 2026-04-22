@@ -2,6 +2,15 @@ const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 
+/** Roles available in the system. Default for new users is 'user'. */
+const ROLES = Object.freeze({
+  USER: 'user',
+  ARTIST: 'artist',
+  COMPOSER: 'composer',
+  MANAGER: 'manager',
+  ADMIN: 'admin',
+});
+
 function signToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 }
@@ -24,4 +33,21 @@ function requireAuth(req, res, next) {
   }
 }
 
-module.exports = { signToken, verifyToken, requireAuth };
+/**
+ * Middleware factory that requires the authenticated user to have at least one
+ * of the specified roles. Must be used after `requireAuth`.
+ */
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    const userRole = req.user.role || ROLES.USER;
+    if (!roles.includes(userRole) && userRole !== ROLES.ADMIN) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    return next();
+  };
+}
+
+module.exports = { signToken, verifyToken, requireAuth, requireRole, ROLES };

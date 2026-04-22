@@ -49,9 +49,46 @@ const upload = multer({
   limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB per file
 });
 
-// GET /api/tracks — list all tracks visible to the caller
+/**
+ * @openapi
+ * /api/tracks:
+ *   get:
+ *     tags: [Tracks]
+ *     summary: List tracks. Returns only the authenticated user's tracks when a valid token is supplied; returns all public tracks otherwise.
+ *     security:
+ *       - bearerAuth: []
+ *       - {}
+ *     responses:
+ *       200:
+ *         description: List of tracks
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 tracks:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Track'
+ */
 router.get('/', async (req, res) => {
   try {
+    // When a valid auth token is present, return only the owner's tracks.
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const { verifyToken } = require('../auth');
+        const payload = verifyToken(authHeader.slice(7));
+        const result = await db.query(
+          'SELECT * FROM records WHERE owner_id = $1 ORDER BY created_at DESC, url_key',
+          [payload.userId],
+        );
+        return res.json({ tracks: result.rows });
+      } catch {
+        // Invalid token — fall through to public listing
+      }
+    }
+    // Unauthenticated: return all tracks (demo / public content)
     const result = await db.query(
       'SELECT * FROM records ORDER BY created_at DESC, url_key',
     );
@@ -61,7 +98,46 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/tracks/upload — upload a track with metadata (authenticated)
+/**
+ * @openapi
+ * /api/tracks/upload:
+ *   post:
+ *     tags: [Tracks]
+ *     summary: Upload a track with metadata
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [audio, title, artist]
+ *             properties:
+ *               audio:
+ *                 type: string
+ *                 format: binary
+ *                 description: Audio file (MP3, FLAC, OGG, WAV, AAC, M4A, Opus – max 100 MB)
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *                 description: Cover art (JPG, PNG, WebP, GIF – optional)
+ *               title: { type: string }
+ *               artist: { type: string }
+ *               genre: { type: string }
+ *               year: { type: integer }
+ *               track_number: { type: integer }
+ *               lyrics: { type: string }
+ *     responses:
+ *       201:
+ *         description: Track uploaded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Track'
+ *       400: { description: Validation error }
+ *       401: { description: Unauthorized }
+ */
 router.post('/upload', requireAuth, upload.fields([
   { name: 'audio', maxCount: 1 },
   { name: 'image', maxCount: 1 },
@@ -120,7 +196,25 @@ router.post('/upload', requireAuth, upload.fields([
   }
 });
 
-// DELETE /api/tracks/:urlKey — delete a track (owner only)
+/**
+ * @openapi
+ * /api/tracks/{urlKey}:
+ *   delete:
+ *     tags: [Tracks]
+ *     summary: Delete a track (owner only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: urlKey
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       204: { description: Deleted }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden – not the owner }
+ *       404: { description: Track not found }
+ */
 router.delete('/:urlKey', requireAuth, async (req, res) => {
   const { urlKey } = req.params;
   try {
