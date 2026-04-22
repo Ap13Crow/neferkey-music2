@@ -169,7 +169,7 @@ export default function UploadView({ token, onUploaded, onClaim }) {
         video.setAttribute('webkit-playsinline', '');
         video.srcObject = stream;
         await video.play();
-        const hasBarcodeDetector = typeof window.BarcodeDetector === 'function';
+        const hasBarcodeDetector = 'BarcodeDetector' in window;
         const detector = hasBarcodeDetector
           // eslint-disable-next-line no-undef
           ? new BarcodeDetector({ formats: ['qr_code'] })
