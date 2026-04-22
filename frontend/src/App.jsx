@@ -6,6 +6,7 @@ import TrackList from './components/TrackList';
 import AlbumsView from './components/AlbumsView';
 import UploadView from './components/UploadView';
 import ProfileView from './components/ProfileView';
+import ConfirmModal from './components/ConfirmModal';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
@@ -43,6 +44,8 @@ export default function App() {
 
   const [queue, setQueue] = useState(DEMO_TRACKS);
   const [queueIndex, setQueueIndex] = useState(0);
+
+  const [confirmDeleteTrack, setConfirmDeleteTrack] = useState(null); // { urlKey, title }
 
   // Verify stored token and load user
   useEffect(() => {
@@ -100,11 +103,18 @@ export default function App() {
   }
 
   function handleDeleteTrack(urlKey) {
-    if (!confirm('Delete this track permanently?')) return;
+    const track = tracks.find((t) => t.url_key === urlKey);
+    setConfirmDeleteTrack({ urlKey, title: track?.title || urlKey });
+  }
+
+  function executeDeleteTrack() {
+    if (!confirmDeleteTrack) return;
+    const { urlKey } = confirmDeleteTrack;
     fetch(`${API_BASE}/tracks/${encodeURIComponent(urlKey)}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     }).then((r) => { if (r.ok) loadTracks(); });
+    setConfirmDeleteTrack(null);
   }
 
   const currentTrack = queue[queueIndex] || null;
@@ -190,6 +200,14 @@ export default function App() {
       <Sidebar view={view} setView={setView} user={user} onLogout={logout} />
       <main className="main-content">{renderContent()}</main>
       <PlayerBar queue={queue} currentIndex={queueIndex} onIndexChange={setQueueIndex} />
+      {confirmDeleteTrack && (
+        <ConfirmModal
+          message={`Permanently delete "${confirmDeleteTrack.title}"? This cannot be undone.`}
+          confirmLabel="Delete track"
+          onConfirm={executeDeleteTrack}
+          onCancel={() => setConfirmDeleteTrack(null)}
+        />
+      )}
     </div>
   );
 }

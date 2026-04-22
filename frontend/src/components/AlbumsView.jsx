@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { IconDisc, IconPlus, IconEdit, IconTrash, IconPlay, IconNote } from './Icons';
+import { IconDisc, IconPlus, IconTrash, IconPlay, IconNote } from './Icons';
 import TrackList from './TrackList';
+import ConfirmModal from './ConfirmModal';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
@@ -119,13 +120,13 @@ function AddTrackModal({ album, allTracks, onClose, onAdded, token }) {
   );
 }
 
-export default function AlbumsView({ albums, allTracks, token, onRefresh, onPlayTracks, currentIndex }) {
+export default function AlbumsView({ albums, allTracks, token, onRefresh, onPlayTracks }) {
   const [selectedAlbum, setSelectedAlbum] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showAddTrack, setShowAddTrack] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null); // { type: 'album'|'track', id, label }
 
   async function deleteAlbum(id) {
-    if (!confirm('Delete this album?')) return;
     await fetch(`${API_BASE}/albums/${id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
@@ -141,7 +142,6 @@ export default function AlbumsView({ albums, allTracks, token, onRefresh, onPlay
       headers: { Authorization: `Bearer ${token}` },
     });
     onRefresh();
-    // Refresh selected album from updated list
   }
 
   function handleAlbumCreated(album) {
@@ -150,138 +150,154 @@ export default function AlbumsView({ albums, allTracks, token, onRefresh, onPlay
     setSelectedAlbum({ ...album, tracks: [] });
   }
 
-  function handleTrackAdded() {
-    onRefresh();
-  }
-
   // Sync selectedAlbum with refreshed albums list
   const currentAlbum = selectedAlbum
     ? albums.find((a) => a.id === selectedAlbum.id) || selectedAlbum
     : null;
 
-  if (currentAlbum) {
-    return (
-      <div>
-        <div className="section-header">
-          <div>
-            <button className="btn btn-ghost btn-sm" onClick={() => setSelectedAlbum(null)}>
-              ← Back to albums
-            </button>
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            {token && (
-              <>
-                <button className="btn btn-secondary btn-sm" onClick={() => setShowAddTrack(true)}>
-                  <IconPlus size={13} /> Add track
-                </button>
-                <button className="btn btn-danger btn-sm" onClick={() => deleteAlbum(currentAlbum.id)}>
-                  <IconTrash size={13} /> Delete album
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="album-detail-hero">
-          {currentAlbum.cover_url ? (
-            <img className="album-detail-cover" src={currentAlbum.cover_url} alt={currentAlbum.name} />
-          ) : (
-            <div className="album-detail-cover-placeholder"><IconDisc size={64} /></div>
-          )}
-          <div className="album-detail-info">
-            <div className="album-detail-type">Album</div>
-            <div className="album-detail-name">{currentAlbum.name}</div>
-            {currentAlbum.description && (
-              <div className="album-detail-desc">{currentAlbum.description}</div>
-            )}
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-              {currentAlbum.tracks?.length || 0} tracks
-            </div>
-            <div className="album-detail-actions">
-              {(currentAlbum.tracks?.length > 0) && (
-                <button className="btn btn-primary" onClick={() => onPlayTracks(currentAlbum.tracks, 0)}>
-                  <IconPlay size={14} /> Play all
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <TrackList
-          tracks={currentAlbum.tracks || []}
-          currentIndex={-1}
-          onPlay={(i) => onPlayTracks(currentAlbum.tracks, i)}
-          onDelete={token ? removeTrackFromAlbum : null}
-          showDelete={!!token}
-        />
-
-        {showAddTrack && (
-          <AddTrackModal
-            album={currentAlbum}
-            allTracks={allTracks}
-            token={token}
-            onClose={() => setShowAddTrack(false)}
-            onAdded={(key) => { handleTrackAdded(key); setShowAddTrack(false); }}
-          />
-        )}
-      </div>
-    );
-  }
-
   return (
     <div>
-      <div className="section-header">
-        <div>
-          <div className="section-title">Albums</div>
-          <div className="section-subtitle">Your personal album collection</div>
-        </div>
-        {token && (
-          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-            <IconPlus size={14} /> New album
-          </button>
-        )}
-      </div>
-
-      {albums.length === 0 ? (
-        <div className="empty-state">
-          <IconDisc size={48} />
-          <h3>No albums yet</h3>
-          <p>{token ? 'Create your first album to organise your tracks.' : 'Sign in to create and manage albums.'}</p>
-        </div>
-      ) : (
-        <div className="album-grid">
-          {albums.map((album) => (
-            <div key={album.id} className="album-card" onClick={() => setSelectedAlbum(album)}>
-              {album.cover_url ? (
-                <img className="album-card-cover" src={album.cover_url} alt={album.name} />
-              ) : (
-                <div className="album-card-cover-placeholder"><IconDisc size={48} /></div>
-              )}
-              <div className="album-card-info">
-                <div className="album-card-name">{album.name}</div>
-                <div className="album-card-meta">{(album.tracks || []).length} tracks</div>
-              </div>
+      {currentAlbum ? (
+        <>
+          <div className="section-header">
+            <div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setSelectedAlbum(null)}>
+                ← Back to albums
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
               {token && (
-                <div className="album-card-actions">
-                  <button
-                    className="icon-btn"
-                    title="Delete"
-                    onClick={(e) => { e.stopPropagation(); deleteAlbum(album.id); }}
-                  >
-                    <IconTrash size={13} />
+                <>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setShowAddTrack(true)}>
+                    <IconPlus size={13} /> Add track
                   </button>
-                </div>
+                  <button
+                    className="btn btn-danger btn-sm"
+                    onClick={() => setConfirmDelete({ type: 'album', id: currentAlbum.id, label: currentAlbum.name })}
+                  >
+                    <IconTrash size={13} /> Delete album
+                  </button>
+                </>
               )}
             </div>
-          ))}
-        </div>
+          </div>
+
+          <div className="album-detail-hero">
+            {currentAlbum.cover_url ? (
+              <img className="album-detail-cover" src={currentAlbum.cover_url} alt={currentAlbum.name} />
+            ) : (
+              <div className="album-detail-cover-placeholder"><IconDisc size={64} /></div>
+            )}
+            <div className="album-detail-info">
+              <div className="album-detail-type">Album</div>
+              <div className="album-detail-name">{currentAlbum.name}</div>
+              {currentAlbum.description && (
+                <div className="album-detail-desc">{currentAlbum.description}</div>
+              )}
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                {currentAlbum.tracks?.length || 0} tracks
+              </div>
+              <div className="album-detail-actions">
+                {(currentAlbum.tracks?.length > 0) && (
+                  <button className="btn btn-primary" onClick={() => onPlayTracks(currentAlbum.tracks, 0)}>
+                    <IconPlay size={14} /> Play all
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <TrackList
+            tracks={currentAlbum.tracks || []}
+            currentIndex={-1}
+            onPlay={(i) => onPlayTracks(currentAlbum.tracks, i)}
+            onDelete={token ? (key) => setConfirmDelete({ type: 'track', id: key, label: (currentAlbum.tracks || []).find((t) => t.url_key === key)?.title || key }) : null}
+            showDelete={!!token}
+          />
+
+          {showAddTrack && (
+            <AddTrackModal
+              album={currentAlbum}
+              allTracks={allTracks}
+              token={token}
+              onClose={() => setShowAddTrack(false)}
+              onAdded={() => { onRefresh(); setShowAddTrack(false); }}
+            />
+          )}
+        </>
+      ) : (
+        <>
+          <div className="section-header">
+            <div>
+              <div className="section-title">Albums</div>
+              <div className="section-subtitle">Your personal album collection</div>
+            </div>
+            {token && (
+              <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+                <IconPlus size={14} /> New album
+              </button>
+            )}
+          </div>
+
+          {albums.length === 0 ? (
+            <div className="empty-state">
+              <IconDisc size={48} />
+              <h3>No albums yet</h3>
+              <p>{token ? 'Create your first album to organise your tracks.' : 'Sign in to create and manage albums.'}</p>
+            </div>
+          ) : (
+            <div className="album-grid">
+              {albums.map((album) => (
+                <div key={album.id} className="album-card" onClick={() => setSelectedAlbum(album)}>
+                  {album.cover_url ? (
+                    <img className="album-card-cover" src={album.cover_url} alt={album.name} />
+                  ) : (
+                    <div className="album-card-cover-placeholder"><IconDisc size={48} /></div>
+                  )}
+                  <div className="album-card-info">
+                    <div className="album-card-name">{album.name}</div>
+                    <div className="album-card-meta">{(album.tracks || []).length} tracks</div>
+                  </div>
+                  {token && (
+                    <div className="album-card-actions">
+                      <button
+                        className="icon-btn"
+                        title="Delete"
+                        onClick={(e) => { e.stopPropagation(); setConfirmDelete({ type: 'album', id: album.id, label: album.name }); }}
+                      >
+                        <IconTrash size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showCreate && (
+            <CreateAlbumModal
+              token={token}
+              onClose={() => setShowCreate(false)}
+              onCreated={handleAlbumCreated}
+            />
+          )}
+        </>
       )}
 
-      {showCreate && (
-        <CreateAlbumModal
-          token={token}
-          onClose={() => setShowCreate(false)}
-          onCreated={handleAlbumCreated}
+      {confirmDelete && (
+        <ConfirmModal
+          message={
+            confirmDelete.type === 'album'
+              ? `Delete album "${confirmDelete.label}"? This cannot be undone.`
+              : `Remove "${confirmDelete.label}" from this album?`
+          }
+          confirmLabel={confirmDelete.type === 'album' ? 'Delete album' : 'Remove track'}
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={() => {
+            if (confirmDelete.type === 'album') deleteAlbum(confirmDelete.id);
+            else removeTrackFromAlbum(confirmDelete.id);
+            setConfirmDelete(null);
+          }}
         />
       )}
     </div>
