@@ -19,7 +19,10 @@ spec:
             - name: PORT
               value: "3000"
             - name: DATABASE_URL
-              value: postgres://music:music@music-postgres:5432/music
+              valueFrom:
+                secretKeyRef:
+                  name: music-db-secret
+                  key: DATABASE_URL
           ports:
             - containerPort: 3000
 ---

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 const fallbackRecords = [
   {
@@ -42,7 +42,7 @@ export default function App() {
 
   async function loadAlbum() {
     try {
-      const response = await fetch(`${API_BASE}/api/albums/${encodeURIComponent(albumKey)}`);
+      const response = await fetch(`${API_BASE}/albums/${encodeURIComponent(albumKey)}`);
       if (!response.ok) {
         throw new Error('Failed to fetch album');
       }
@@ -57,7 +57,7 @@ export default function App() {
 
   async function loadRecord() {
     try {
-      const response = await fetch(`${API_BASE}/api/records/${encodeURIComponent(urlKey)}`);
+      const response = await fetch(`${API_BASE}/records/${encodeURIComponent(urlKey)}`);
       if (!response.ok) {
         throw new Error('Failed to fetch record');
       }

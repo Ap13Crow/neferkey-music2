@@ -1,4 +1,15 @@
 apiVersion: v1
+kind: Secret
+metadata:
+  name: music-db-secret
+type: Opaque
+stringData:
+  POSTGRES_USER: music
+  POSTGRES_PASSWORD: music
+  POSTGRES_DB: music
+  DATABASE_URL: postgres://music:music@music-postgres:5432/music
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: music-postgres-pvc
@@ -28,11 +39,20 @@ spec:
           image: postgres:16-alpine
           env:
             - name: POSTGRES_USER
-              value: music
+              valueFrom:
+                secretKeyRef:
+                  name: music-db-secret
+                  key: POSTGRES_USER
             - name: POSTGRES_PASSWORD
-              value: music
+              valueFrom:
+                secretKeyRef:
+                  name: music-db-secret
+                  key: POSTGRES_PASSWORD
             - name: POSTGRES_DB
-              value: music
+              valueFrom:
+                secretKeyRef:
+                  name: music-db-secret
+                  key: POSTGRES_DB
           ports:
             - containerPort: 5432
           volumeMounts:
