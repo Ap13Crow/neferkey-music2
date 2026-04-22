@@ -5,7 +5,28 @@ const { requireAuth } = require('../auth');
 
 const router = express.Router();
 
-// GET /api/albums — list albums owned by the current user (auth required)
+/**
+ * @openapi
+ * /api/albums:
+ *   get:
+ *     tags: [Albums]
+ *     summary: List albums owned by the authenticated user
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User's albums with embedded tracks
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 albums:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Album'
+ *       401: { description: Unauthorized }
+ */
 router.get('/', requireAuth, async (req, res) => {
   try {
     const result = await db.query(
