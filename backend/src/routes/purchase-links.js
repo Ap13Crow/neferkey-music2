@@ -4,6 +4,7 @@ const db = require('../db');
 const { requireAuth, requireRole, ROLES } = require('../auth');
 
 const router = express.Router();
+// token, resource_type, resource_key, label, created_by, expires_at, target_user_id
 const PARAMS_PER_LINK = 7;
 
 /**
@@ -65,7 +66,7 @@ router.post('/', requireAuth, requireRole(ROLES.ADMIN), async (req, res) => {
     }
 
     let targetUserId = null;
-    if (target_user_id !== undefined && target_user_id !== null && String(target_user_id).trim()) {
+    if (target_user_id?.toString().trim()) {
       const target = await db.query(
         'SELECT id FROM users WHERE id = $1 LIMIT 1',
         [String(target_user_id).trim()],

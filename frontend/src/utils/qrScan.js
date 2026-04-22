@@ -1,5 +1,6 @@
 export function extractClaimToken(url) {
   const raw = String(url ?? '').trim();
+  // Directly scanned claim tokens are 40-char hex strings.
   if (/^[a-f0-9]{40}$/i.test(raw)) return raw;
   try {
     const u = new URL(raw);

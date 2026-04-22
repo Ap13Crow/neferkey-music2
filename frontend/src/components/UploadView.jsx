@@ -202,6 +202,7 @@ export default function UploadView({ token, onUploaded, onClaim }) {
           canvas.height = video.videoHeight;
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          // Most purchase QR codes are high-contrast; avoid extra inversion work for faster fallback scanning.
           const code = jsQR(frame.data, canvas.width, canvas.height, { inversionAttempts: 'dontInvert' });
           if (code?.data) {
             const raw = code.data;
