@@ -90,6 +90,16 @@ router.post('/upload', requireAuth, upload.fields([
       imageUrl = `/uploads/${imagePath}`;
     }
 
+    const parsedYear = year ? parseInt(year, 10) : null;
+    if (year && (isNaN(parsedYear) || parsedYear < 1000 || parsedYear > 2100)) {
+      return res.status(400).json({ error: 'Invalid year — must be between 1000 and 2100' });
+    }
+
+    const parsedTrackNum = track_number ? parseInt(track_number, 10) : null;
+    if (track_number && (isNaN(parsedTrackNum) || parsedTrackNum < 1)) {
+      return res.status(400).json({ error: 'Invalid track_number — must be a positive integer' });
+    }
+
     const result = await db.query(
       `INSERT INTO records
         (url_key, album_key, title, artist, audio_url, image_url, lyrics, genre, year, track_number, file_path, image_path, owner_id)
@@ -98,8 +108,8 @@ router.post('/upload', requireAuth, upload.fields([
       [
         urlKey, '', title.trim(), artist.trim(),
         audioUrl, imageUrl, lyrics.trim(),
-        genre.trim(), year ? parseInt(year, 10) : null,
-        track_number ? parseInt(track_number, 10) : null,
+        genre.trim(), parsedYear,
+        parsedTrackNum,
         filePath, imagePath, req.user.userId,
       ],
     );
