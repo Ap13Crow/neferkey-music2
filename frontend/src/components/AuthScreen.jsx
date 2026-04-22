@@ -2,8 +2,8 @@ import { useState } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
-export default function AuthScreen({ onAuth }) {
-  const [tab, setTab] = useState('login');
+export default function AuthScreen({ onAuth, defaultTab = 'login' }) {
+  const [tab, setTab] = useState(defaultTab);
   const [form, setForm] = useState({ username: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
