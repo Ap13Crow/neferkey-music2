@@ -29,17 +29,18 @@ const swaggerSpec = swaggerJsdoc({
       description:
         'REST API for the Neferkey music player. Supports authentication, track management, album management, and user account operations.\n\n' +
         '**Authentication**: Most write endpoints and user-scoped reads require a Bearer JWT obtained from `/api/auth/login` or `/api/auth/register`.\n\n' +
+        '**Getting a Token**: 1) Call POST `/api/auth/register` or `/api/auth/login`, 2) Copy the `token` value from the response, 3) Click the "Authorize" button (top-right), paste the token, 4) Click "Authorize" in the dialog.\n\n' +
         '**Roles** (current): `user` (default), `artist`, `composer`, `manager`, `admin`. Future route gates will use these roles.',
       contact: { name: 'Neferkey' },
     },
-    servers: [{ url: '/api', description: 'Current server' }],
+    servers: [{ url: '/', description: 'Current server (paths include /api prefix)' }],
     components: {
       securitySchemes: {
         bearerAuth: {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
-          description: 'Paste a JWT token obtained from /api/auth/login or /api/auth/register',
+          description: 'JWT token obtained from /api/auth/login or /api/auth/register. Copy the token value from the response and paste it here.',
         },
       },
       schemas: {
@@ -75,6 +76,7 @@ const swaggerSpec = swaggerJsdoc({
             year: { type: 'integer', nullable: true },
             track_number: { type: 'integer', nullable: true },
             owner_id: { type: 'string', format: 'uuid', nullable: true },
+            is_public: { type: 'boolean', description: 'Whether track is publicly visible' },
             created_at: { type: 'string', format: 'date-time' },
           },
         },
@@ -134,9 +136,14 @@ app.get('/health', (_req, res) => {
 // Auth routes (stricter limit for login/register)
 app.use('/api/auth', authLimiter, authRouter);
 
+// Backward-compatibility aliases for clients still sending double /api prefix.
+app.use('/api/api/auth', authLimiter, authRouter);
+
 // Track + album routes
 app.use('/api/tracks', apiLimiter, tracksRouter);
 app.use('/api/albums', apiLimiter, albumsRouter);
+app.use('/api/api/tracks', apiLimiter, tracksRouter);
+app.use('/api/api/albums', apiLimiter, albumsRouter);
 
 /**
  * @openapi
@@ -159,6 +166,20 @@ app.use('/api/albums', apiLimiter, albumsRouter);
  *       404: { description: Not found }
  */
 app.get('/api/records/:urlKey', apiLimiter, async (req, res) => {
+  const { urlKey } = req.params;
+  try {
+    const result = await db.query('SELECT * FROM records WHERE url_key = $1 LIMIT 1', [urlKey]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+    return res.json(result.rows[0]);
+  } catch {
+    return res.status(500).json({ error: 'Failed to fetch record' });
+  }
+});
+
+// Legacy alias for double-prefixed records endpoint.
+app.get('/api/api/records/:urlKey', apiLimiter, async (req, res) => {
   const { urlKey } = req.params;
   try {
     const result = await db.query('SELECT * FROM records WHERE url_key = $1 LIMIT 1', [urlKey]);

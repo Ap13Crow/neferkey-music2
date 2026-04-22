@@ -11,6 +11,7 @@ const router = express.Router();
  *   post:
  *     tags: [Auth]
  *     summary: Register a new user
+ *     description: Creates a new user account and returns a JWT token for immediate authentication
  *     requestBody:
  *       required: true
  *       content:
@@ -19,18 +20,19 @@ const router = express.Router();
  *             type: object
  *             required: [username, email, password]
  *             properties:
- *               username: { type: string }
+ *               username: { type: string, minLength: 3 }
  *               email: { type: string, format: email }
- *               password: { type: string, minLength: 8 }
+ *               password: { type: string, minLength: 8, description: 'Must be at least 8 characters' }
  *     responses:
  *       201:
- *         description: Registration successful
+ *         description: Registration successful. Copy the token value and paste it in the Authorization header (Authorize button, top-right)
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/AuthResponse'
- *       400: { description: Validation error }
+ *       400: { description: Validation error or missing fields }
  *       409: { description: Username or email already taken }
+ *       500: { description: Registration failed }
  */
 router.post('/register', async (req, res) => {
   const { username, email, password } = req.body;
@@ -63,6 +65,7 @@ router.post('/register', async (req, res) => {
  *   post:
  *     tags: [Auth]
  *     summary: Log in with email and password
+ *     description: Authenticates user and returns a JWT token. Copy the token value and paste it in the Authorization header using the Authorize button in Swagger UI
  *     requestBody:
  *       required: true
  *       content:
@@ -75,12 +78,14 @@ router.post('/register', async (req, res) => {
  *               password: { type: string }
  *     responses:
  *       200:
- *         description: Login successful
+ *         description: Login successful. Copy the token value and paste it in the Authorize button
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/AuthResponse'
- *       401: { description: Invalid credentials }
+ *       400: { description: Missing email or password }
+ *       401: { description: Invalid email or password }
+ *       500: { description: Login failed }
  */
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;

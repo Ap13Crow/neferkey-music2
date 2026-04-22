@@ -36,6 +36,7 @@ async function initDb() {
       file_path TEXT NOT NULL DEFAULT '',
       image_path TEXT NOT NULL DEFAULT '',
       owner_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      is_public BOOLEAN NOT NULL DEFAULT false,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
@@ -48,6 +49,7 @@ async function initDb() {
     `ALTER TABLE records ADD COLUMN IF NOT EXISTS file_path TEXT NOT NULL DEFAULT ''`,
     `ALTER TABLE records ADD COLUMN IF NOT EXISTS image_path TEXT NOT NULL DEFAULT ''`,
     `ALTER TABLE records ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES users(id) ON DELETE SET NULL`,
+    `ALTER TABLE records ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT false`,
   ]) {
     await pool.query(stmt);
   }
@@ -82,10 +84,10 @@ async function initDb() {
 
   // Demo seed data
   await pool.query(`
-    INSERT INTO records (url_key, album_key, title, artist, audio_url, image_url, lyrics)
+    INSERT INTO records (url_key, album_key, title, artist, audio_url, image_url, lyrics, is_public)
     VALUES
-      ('demo-track-1', 'demo-album', 'Prelude in C Major', 'J.S. Bach', 'https://cdn.freesound.org/previews/431/431117_5121236-lq.mp3', 'https://picsum.photos/seed/demo1/600/600', 'A gentle arpeggio introduces the harmony...'),
-      ('demo-track-2', 'demo-album', 'Moonlight Sonata (Excerpt)', 'L. van Beethoven', 'https://cdn.freesound.org/previews/415/415209_5121236-lq.mp3', 'https://picsum.photos/seed/demo2/600/600', 'Soft triplets unfold in the night...')
+      ('demo-track-1', 'demo-album', 'Prelude in C Major', 'J.S. Bach', 'https://cdn.freesound.org/previews/431/431117_5121236-lq.mp3', 'https://picsum.photos/seed/demo1/600/600', 'A gentle arpeggio introduces the harmony...', true),
+      ('demo-track-2', 'demo-album', 'Moonlight Sonata (Excerpt)', 'L. van Beethoven', 'https://cdn.freesound.org/previews/415/415209_5121236-lq.mp3', 'https://picsum.photos/seed/demo2/600/600', 'Soft triplets unfold in the night...', true)
     ON CONFLICT (url_key) DO NOTHING;
   `);
 }

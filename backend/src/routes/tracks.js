@@ -54,7 +54,7 @@ const upload = multer({
  * /api/tracks:
  *   get:
  *     tags: [Tracks]
- *     summary: List tracks. Returns only the authenticated user's tracks when a valid token is supplied; returns all public tracks otherwise.
+ *     summary: List tracks. Returns only the authenticated user's tracks when a valid token is supplied; returns only public tracks otherwise.
  *     security:
  *       - bearerAuth: []
  *       - {}
@@ -88,9 +88,9 @@ router.get('/', async (req, res) => {
         // Invalid token — fall through to public listing
       }
     }
-    // Unauthenticated: return all tracks (demo / public content)
+    // Unauthenticated: return only public tracks
     const result = await db.query(
-      'SELECT * FROM records ORDER BY created_at DESC, url_key',
+      'SELECT * FROM records WHERE is_public = true ORDER BY created_at DESC, url_key',
     );
     return res.json({ tracks: result.rows });
   } catch {
@@ -128,6 +128,7 @@ router.get('/', async (req, res) => {
  *               year: { type: integer }
  *               track_number: { type: integer }
  *               lyrics: { type: string }
+ *               is_public: { type: boolean, description: 'Whether track is publicly visible (default: false)' }
  *     responses:
  *       201:
  *         description: Track uploaded
@@ -143,7 +144,7 @@ router.post('/upload', requireAuth, upload.fields([
   { name: 'image', maxCount: 1 },
 ]), async (req, res) => {
   try {
-    const { title, artist, genre = '', year, track_number, lyrics = '' } = req.body;
+    const { title, artist, genre = '', year, track_number, lyrics = '', is_public = 'false' } = req.body;
     if (!title || !artist) {
       return res.status(400).json({ error: 'title and artist are required' });
     }
@@ -176,23 +177,83 @@ router.post('/upload', requireAuth, upload.fields([
       return res.status(400).json({ error: 'Invalid track_number — must be a positive integer' });
     }
 
+    const isPublic = is_public === 'true' || is_public === true;
+
     const result = await db.query(
       `INSERT INTO records
-        (url_key, album_key, title, artist, audio_url, image_url, lyrics, genre, year, track_number, file_path, image_path, owner_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        (url_key, album_key, title, artist, audio_url, image_url, lyrics, genre, year, track_number, file_path, image_path, owner_id, is_public)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING *`,
       [
         urlKey, '', title.trim(), artist.trim(),
         audioUrl, imageUrl, lyrics.trim(),
         genre.trim(), parsedYear,
         parsedTrackNum,
-        filePath, imagePath, req.user.userId,
+        filePath, imagePath, req.user.userId, isPublic,
       ],
     );
 
     return res.status(201).json(result.rows[0]);
   } catch (err) {
     return res.status(500).json({ error: 'Upload failed', detail: err.message });
+  }
+});
+
+/**
+ * @openapi
+ * /api/tracks/{urlKey}:
+ *   patch:
+ *     tags: [Tracks]
+ *     summary: Update track visibility (owner only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: urlKey
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               is_public: { type: boolean, description: 'Whether track is publicly visible' }
+ *     responses:
+ *       200: { description: Track updated }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden – not the owner }
+ *       404: { description: Track not found }
+ */
+router.patch('/:urlKey', requireAuth, async (req, res) => {
+  const { urlKey } = req.params;
+  const { is_public } = req.body;
+  try {
+    const existing = await db.query(
+      'SELECT * FROM records WHERE url_key = $1 LIMIT 1',
+      [urlKey],
+    );
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Track not found' });
+    }
+    const track = existing.rows[0];
+    if (track.owner_id !== req.user.userId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (is_public !== undefined) {
+      await db.query(
+        'UPDATE records SET is_public = $1 WHERE url_key = $2',
+        [is_public, urlKey],
+      );
+    }
+    const updated = await db.query(
+      'SELECT * FROM records WHERE url_key = $1 LIMIT 1',
+      [urlKey],
+    );
+    return res.json(updated.rows[0]);
+  } catch {
+    return res.status(500).json({ error: 'Failed to update track' });
   }
 });
 
