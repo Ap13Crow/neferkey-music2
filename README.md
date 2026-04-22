@@ -19,7 +19,12 @@ Docker-based cloud-native music player with a React frontend and PostgreSQL-back
 
 ## Local run with Docker
 
+Use environment variables for DB credentials (defaults are provided for local development):
+
 ```bash
+export POSTGRES_USER=music
+export POSTGRES_PASSWORD=change-me
+export POSTGRES_DB=music
 docker compose up --build
 ```
 
@@ -38,7 +43,17 @@ curl http://localhost:3000/api/albums/demo-album
 1. Build and push images:
    - `neferkey/music-backend:latest`
    - `neferkey/music-frontend:latest`
-2. Apply manifests:
+2. Create the DB secret (or use your cloud secret integration):
+
+```bash
+kubectl create secret generic music-db-secret \
+  --from-literal=POSTGRES_USER=music \
+  --from-literal=POSTGRES_PASSWORD='<strong-random-password>' \
+  --from-literal=POSTGRES_DB=music \
+  --from-literal=DATABASE_URL='postgres://music:<strong-random-password>@music-postgres:5432/music'
+```
+
+3. Apply manifests:
 
 ```bash
 kubectl apply -f k8s/postgres.yaml
