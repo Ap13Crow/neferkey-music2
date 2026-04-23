@@ -94,8 +94,9 @@ Docker Hub:
 Google Cloud:
 
 - `GCP_PROJECT_ID`
-- `GCP_WORKLOAD_IDENTITY_PROVIDER`
-- `GCP_SERVICE_ACCOUNT`
+- Authentication (choose one):
+  - Workload Identity: `GCP_WORKLOAD_IDENTITY_PROVIDER` + `GCP_SERVICE_ACCOUNT`
+  - Service Account JSON key: `GCP_SA_KEY`
 - `GCP_DATABASE_URL_SECRET_NAME`
 - `GCP_JWT_SECRET_NAME`
 - `GCP_CLOUD_SQL_CONNECTION_NAME` (optional if not using Cloud SQL socket)
