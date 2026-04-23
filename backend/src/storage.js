@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { Storage } = require('@google-cloud/storage');
@@ -14,8 +15,6 @@ function makeFilename(originalname) {
   const ext = path.extname(originalname || '').toLowerCase();
   return `${crypto.randomUUID()}${ext}`;
 }
-
-const crypto = require('crypto');
 
 function buildObjectKey(subfolder, filename) {
   return `${gcsPrefix}/${subfolder}/${filename}`;

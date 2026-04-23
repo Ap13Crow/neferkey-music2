@@ -78,23 +78,41 @@ jobs:
   deploy-backend:
     needs: build-backend
     runs-on: ubuntu-latest
-    if: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && secrets.GCP_SERVICE_ACCOUNT != '' && secrets.GCP_PROJECT_ID != '' }}
     outputs:
       backend_url: ${{ steps.deploy.outputs.backend_url }}
     steps:
+      - name: Check deploy secret availability
+        id: check
+        env:
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_DATABASE_URL_SECRET_NAME: ${{ secrets.GCP_DATABASE_URL_SECRET_NAME }}
+          GCP_JWT_SECRET_NAME: ${{ secrets.GCP_JWT_SECRET_NAME }}
+        run: |
+          if [ -z "${GCP_WORKLOAD_IDENTITY_PROVIDER}" ] || [ -z "${GCP_SERVICE_ACCOUNT}" ] || [ -z "${GCP_PROJECT_ID}" ] || [ -z "${GCP_DATABASE_URL_SECRET_NAME}" ] || [ -z "${GCP_JWT_SECRET_NAME}" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Missing required GCP deploy secrets. Skipping Cloud Run deployment."
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Authenticate to Google Cloud
+        if: steps.check.outputs.enabled == 'true'
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Setup gcloud
+        if: steps.check.outputs.enabled == 'true'
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
       - name: Deploy backend Cloud Run service
         id: deploy
+        if: steps.check.outputs.enabled == 'true'
         env:
           BACKEND_IMAGE: docker.io/${{ env.BACKEND_IMAGE_REPO }}:${{ github.sha }}
           DATABASE_URL_SECRET: ${{ secrets.GCP_DATABASE_URL_SECRET_NAME }}
@@ -103,20 +121,21 @@ jobs:
           GCS_UPLOAD_BUCKET: ${{ secrets.GCP_GCS_UPLOAD_BUCKET }}
         run: |
           set -euo pipefail
+          ENV_VARS="NODE_ENV=production,GCS_UPLOAD_PREFIX=uploads"
+          if [ -n "${GCS_UPLOAD_BUCKET}" ]; then
+            ENV_VARS="${ENV_VARS},GCS_UPLOAD_BUCKET=${GCS_UPLOAD_BUCKET}"
+          fi
           ARGS=(
             "--image=${BACKEND_IMAGE}"
             "--region=${GCP_REGION}"
             "--platform=managed"
             "--allow-unauthenticated"
             "--port=3000"
-            "--set-env-vars=NODE_ENV=production,GCS_UPLOAD_PREFIX=uploads"
+            "--set-env-vars=${ENV_VARS}"
             "--set-secrets=DATABASE_URL=${DATABASE_URL_SECRET}:latest,JWT_SECRET=${JWT_SECRET_SECRET}:latest"
           )
           if [ -n "${CLOUD_SQL_CONNECTION_NAME}" ]; then
             ARGS+=("--add-cloudsql-instances=${CLOUD_SQL_CONNECTION_NAME}")
-          fi
-          if [ -n "${GCS_UPLOAD_BUCKET}" ]; then
-            ARGS[5]="--set-env-vars=NODE_ENV=production,GCS_UPLOAD_PREFIX=uploads,GCS_UPLOAD_BUCKET=${GCS_UPLOAD_BUCKET}"
           fi
           gcloud run deploy "${BACKEND_SERVICE_NAME}" "${ARGS[@]}"
           BACKEND_URL="$(gcloud run services describe "${BACKEND_SERVICE_NAME}" --region "${GCP_REGION}" --format='value(status.url)')"
