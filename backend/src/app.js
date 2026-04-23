@@ -11,10 +11,22 @@ const albumsRouter = require('./routes/albums');
 const purchaseLinksRouter = require('./routes/purchase-links');
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '../uploads');
+const corsOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 const app = express();
 
-app.use(cors());
+app.use(cors(corsOrigins.length > 0 ? {
+  origin(origin, callback) {
+    if (!origin || corsOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error('Not allowed by CORS'));
+  },
+} : undefined));
 app.use(express.json());
 
 // Serve uploaded files

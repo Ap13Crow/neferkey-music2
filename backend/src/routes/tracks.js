@@ -5,23 +5,9 @@ const multer = require('multer');
 
 const db = require('../db');
 const { requireAuth } = require('../auth');
+const { makeFilename, storeUpload } = require('../storage');
 
 const router = express.Router();
-
-const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '../../uploads');
-
-const storage = multer.diskStorage({
-  destination: (_req, file, cb) => {
-    const sub = file.fieldname === 'audio' ? 'audio' : 'images';
-    const fs = require('fs');
-    const dir = path.join(UPLOADS_DIR, sub);
-    fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (_req, _file, cb) => {
-    cb(null, `${crypto.randomUUID()}${path.extname(_file.originalname).toLowerCase()}`);
-  },
-});
 
 function fileFilter(_req, file, cb) {
   if (file.fieldname === 'audio') {
@@ -44,7 +30,7 @@ function fileFilter(_req, file, cb) {
 }
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   fileFilter,
   limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB per file
 });
@@ -164,14 +150,26 @@ router.post('/upload', requireAuth, upload.fields([
     }
 
     const urlKey = crypto.randomUUID();
-    const filePath = `audio/${audioFile.filename}`;
-    const audioUrl = `/uploads/${filePath}`;
+    const audioFilename = makeFilename(audioFile.originalname);
+    const storedAudio = await storeUpload({
+      file: audioFile,
+      subfolder: 'audio',
+      filename: audioFilename,
+    });
+    const filePath = storedAudio.filePath;
+    const audioUrl = storedAudio.publicUrl;
 
     let imagePath = '';
     let imageUrl = '';
     if (imageFile) {
-      imagePath = `images/${imageFile.filename}`;
-      imageUrl = `/uploads/${imagePath}`;
+      const imageFilename = makeFilename(imageFile.originalname);
+      const storedImage = await storeUpload({
+        file: imageFile,
+        subfolder: 'images',
+        filename: imageFilename,
+      });
+      imagePath = storedImage.filePath;
+      imageUrl = storedImage.publicUrl;
     }
 
     const parsedYear = year ? parseInt(year, 10) : null;
