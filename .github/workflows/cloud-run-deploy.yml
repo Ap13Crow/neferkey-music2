@@ -1,0 +1,171 @@
+name: CI + Docker Hub + Cloud Run
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  BACKEND_IMAGE_REPO: neferkey/music-backend
+  FRONTEND_IMAGE_REPO: neferkey/music-frontend
+  GCP_REGION: europe-west1
+  BACKEND_SERVICE_NAME: neferkey-music-backend
+  FRONTEND_SERVICE_NAME: neferkey-music-frontend
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Backend tests
+        run: |
+          cd backend
+          npm ci
+          npm test
+
+      - name: Frontend tests + build
+        run: |
+          cd frontend
+          npm ci
+          npm test
+          npm run build
+
+  build-backend:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      backend_image_sha: ${{ steps.meta.outputs.backend_image_sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image metadata
+        id: meta
+        run: |
+          echo "backend_image_sha=docker.io/${BACKEND_IMAGE_REPO}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "backend_image_latest=docker.io/${BACKEND_IMAGE_REPO}:latest" >> "$GITHUB_OUTPUT"
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push backend image (latest + sha)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            docker.io/${{ env.BACKEND_IMAGE_REPO }}:latest
+            docker.io/${{ env.BACKEND_IMAGE_REPO }}:${{ github.sha }}
+
+  deploy-backend:
+    needs: build-backend
+    runs-on: ubuntu-latest
+    if: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && secrets.GCP_SERVICE_ACCOUNT != '' && secrets.GCP_PROJECT_ID != '' }}
+    outputs:
+      backend_url: ${{ steps.deploy.outputs.backend_url }}
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Deploy backend Cloud Run service
+        id: deploy
+        env:
+          BACKEND_IMAGE: docker.io/${{ env.BACKEND_IMAGE_REPO }}:${{ github.sha }}
+          DATABASE_URL_SECRET: ${{ secrets.GCP_DATABASE_URL_SECRET_NAME }}
+          JWT_SECRET_SECRET: ${{ secrets.GCP_JWT_SECRET_NAME }}
+          CLOUD_SQL_CONNECTION_NAME: ${{ secrets.GCP_CLOUD_SQL_CONNECTION_NAME }}
+          GCS_UPLOAD_BUCKET: ${{ secrets.GCP_GCS_UPLOAD_BUCKET }}
+        run: |
+          set -euo pipefail
+          ARGS=(
+            "--image=${BACKEND_IMAGE}"
+            "--region=${GCP_REGION}"
+            "--platform=managed"
+            "--allow-unauthenticated"
+            "--port=3000"
+            "--set-env-vars=NODE_ENV=production,GCS_UPLOAD_PREFIX=uploads"
+            "--set-secrets=DATABASE_URL=${DATABASE_URL_SECRET}:latest,JWT_SECRET=${JWT_SECRET_SECRET}:latest"
+          )
+          if [ -n "${CLOUD_SQL_CONNECTION_NAME}" ]; then
+            ARGS+=("--add-cloudsql-instances=${CLOUD_SQL_CONNECTION_NAME}")
+          fi
+          if [ -n "${GCS_UPLOAD_BUCKET}" ]; then
+            ARGS[5]="--set-env-vars=NODE_ENV=production,GCS_UPLOAD_PREFIX=uploads,GCS_UPLOAD_BUCKET=${GCS_UPLOAD_BUCKET}"
+          fi
+          gcloud run deploy "${BACKEND_SERVICE_NAME}" "${ARGS[@]}"
+          BACKEND_URL="$(gcloud run services describe "${BACKEND_SERVICE_NAME}" --region "${GCP_REGION}" --format='value(status.url)')"
+          echo "backend_url=${BACKEND_URL}" >> "$GITHUB_OUTPUT"
+
+  build-and-deploy-frontend:
+    needs: [deploy-backend]
+    runs-on: ubuntu-latest
+    if: ${{ needs.deploy-backend.outputs.backend_url != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push frontend image (latest + sha)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          build-args: |
+            VITE_API_BASE_URL=${{ needs.deploy-backend.outputs.backend_url }}/api
+          tags: |
+            docker.io/${{ env.FRONTEND_IMAGE_REPO }}:latest
+            docker.io/${{ env.FRONTEND_IMAGE_REPO }}:${{ github.sha }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Deploy frontend Cloud Run service
+        run: |
+          gcloud run deploy "${FRONTEND_SERVICE_NAME}" \
+            --image "docker.io/${FRONTEND_IMAGE_REPO}:${GITHUB_SHA}" \
+            --region "${GCP_REGION}" \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080

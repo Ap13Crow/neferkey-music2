@@ -1,7 +1,13 @@
 const { Pool } = require('pg');
 const { DEFAULT_ADMIN_EMAIL } = require('./constants');
 
-const connectionString = process.env.DATABASE_URL || 'postgres://music:music@localhost:5432/music';
+const isProduction = process.env.NODE_ENV === 'production';
+const connectionString = process.env.DATABASE_URL || (isProduction ? '' : 'postgres://music:music@localhost:5432/music');
+
+if (!connectionString) {
+  throw new Error('DATABASE_URL must be set in production');
+}
+
 const pool = new Pool({ connectionString });
 
 async function initDb() {

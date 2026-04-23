@@ -1,109 +1,155 @@
 # neferkey-music2
 
-Docker-based cloud-native music player with a React frontend and PostgreSQL-backed API.  
-Inspired visually by the Koel music player — dark multi-panel layout with sidebar, library, album builder, and full-featured transport bar.
+Docker-based cloud-native music player with a React frontend and PostgreSQL-backed API.
 
 ## Features
 
-- **Koel-inspired dark UI** — sidebar navigation, library view, album grid, now-playing transport bar
-- **Authentication** — register / login with JWT; protected routes for upload and album management
-- **Track upload** — upload audio files (MP3, FLAC, OGG, WAV, AAC, M4A, Opus) with rich metadata (title, artist, genre, year, track number, lyrics, cover art)
-- **Album builder** — create named albums, add/remove tracks, play all
-- **Library** — browse all tracks; delete your own uploads
-- **Lyrics panel** — view lyrics for the current track
-- **Player** — play/pause, prev/next, seek bar, volume, playback speed, auto-advance
-- **User preferences** — default playback speed, autoplay toggle
-- Backwards-compatible API (`/api/records/:urlKey`, `/api/albums/:albumKey`)
-- Linux-friendly Docker Compose setup
-- Kubernetes manifests for cloud deployment (GKE, EKS, AKS)
+- React frontend + Express backend + PostgreSQL
+- JWT authentication (register/login)
+- Track upload with metadata and artwork
+- Albums and library management
+- Swagger API docs at `/api/docs`
+- Docker Compose for local development
+- Cloud Run deployment workflow (frontend + backend services)
 
-## Quick start with Docker Compose
+## Local development (Docker Compose)
+
+1. Create local env file:
 
 ```bash
-# Optionally override defaults:
-export POSTGRES_USER=music
-export POSTGRES_PASSWORD=change-me
-export POSTGRES_DB=music
-export JWT_SECRET=your-random-secret
+cp .env.example .env
+```
 
+2. Set strong values in `.env` (at minimum `POSTGRES_PASSWORD` and `JWT_SECRET`).
+
+3. Run:
+
+```bash
 docker compose up --build
 ```
 
 - Frontend: `http://localhost:5173`
 - Backend API: `http://localhost:3000`
 
-Uploaded audio and artwork are stored in a named Docker volume (`uploads`) and served at `/uploads/…`.
+## Production env strategy
 
-## API reference
+- Commit only templates: `.env.example`, `.env.production.example`
+- Never commit real `.env.production` or real secrets
+- In production, inject secrets from **Google Secret Manager**
 
-### Auth
+### Required production secrets
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/auth/register` | — | `{ username, email, password }` → `{ token, user }` |
-| POST | `/api/auth/login` | — | `{ email, password }` → `{ token, user }` |
-| GET  | `/api/auth/me` | Bearer | Current user profile |
-| PUT  | `/api/auth/me/preferences` | Bearer | `{ preferences: {} }` |
+- `DATABASE_URL`
+- `JWT_SECRET`
 
-### Tracks
+### Recommended production env vars
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET  | `/api/tracks` | — | List all tracks |
-| POST | `/api/tracks/upload` | Bearer | `multipart/form-data`: `audio` (file), `image` (file, optional), `title`, `artist`, `genre`, `year`, `track_number`, `lyrics` |
-| DELETE | `/api/tracks/:urlKey` | Bearer | Delete own track |
+- `NODE_ENV=production`
+- `PORT=3000` (backend Cloud Run service)
+- `CORS_ORIGIN=https://<frontend-service-url>`
+- `GCS_UPLOAD_BUCKET=<bucket-name>`
+- `GCS_UPLOAD_PREFIX=uploads`
 
-### Albums
+## Upload storage mode
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET  | `/api/albums` | Bearer | List user's albums (includes tracks array) |
-| GET  | `/api/albums/:albumKey` | — | Legacy: records by `album_key`; also supports UUID album id |
-| POST | `/api/albums` | Bearer | `{ name, description?, cover_url? }` |
-| PUT  | `/api/albums/:id` | Bearer | Update album metadata |
-| DELETE | `/api/albums/:id` | Bearer | Delete album |
-| POST | `/api/albums/:id/tracks` | Bearer | `{ track_key }` — add track |
-| DELETE | `/api/albums/:id/tracks/:trackKey` | Bearer | Remove track from album |
+The backend now supports two upload modes:
 
-### Legacy
+1. **Local dev mode** (default): files are written to `/app/uploads` and served under `/uploads/...`
+2. **Cloud mode** (`GCS_UPLOAD_BUCKET` set): files are uploaded to Google Cloud Storage and persisted outside Cloud Run ephemeral disk
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/records/:urlKey` | Get single track by url_key |
-| GET | `/health` | Health check |
+For cloud mode, grant backend runtime service account write access to the bucket.
 
-## Kubernetes deployment
+## Docker images and tags
 
-1. Build and push images:
-   - `neferkey/music-backend:latest`
-   - `neferkey/music-frontend:latest`
+Images are published to Docker Hub with two tags per build:
 
-2. Create the DB secret:
+- `latest`
+- `<commit-sha>`
+
+Repositories:
+
+- `neferkey/music-backend`
+- `neferkey/music-frontend`
+
+## GitHub Actions CI/CD
+
+Workflow: `.github/workflows/cloud-run-deploy.yml`
+
+On `main` push or version tag:
+
+1. Runs backend and frontend tests/build
+2. Builds and pushes backend image to Docker Hub (`latest` + SHA)
+3. Deploys backend to Cloud Run
+4. Builds frontend image with backend URL injected into `VITE_API_BASE_URL`
+5. Pushes frontend image to Docker Hub (`latest` + SHA)
+6. Deploys frontend to Cloud Run
+
+### Required GitHub Secrets
+
+Docker Hub:
+
+- `DOCKERHUB_USERNAME`
+- `DOCKERHUB_TOKEN`
+
+Google Cloud:
+
+- `GCP_PROJECT_ID`
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`
+- `GCP_SERVICE_ACCOUNT`
+- `GCP_DATABASE_URL_SECRET_NAME`
+- `GCP_JWT_SECRET_NAME`
+- `GCP_CLOUD_SQL_CONNECTION_NAME` (optional if not using Cloud SQL socket)
+- `GCP_GCS_UPLOAD_BUCKET` (optional, recommended)
+
+## Google Cloud setup (project: `Neferkey-Music-App`)
+
+Enable APIs:
 
 ```bash
-kubectl create secret generic music-db-secret \
-  --from-literal=POSTGRES_USER=music \
-  --from-literal=POSTGRES_PASSWORD='<strong-random-password>' \
-  --from-literal=POSTGRES_DB=music \
-  --from-literal=DATABASE_URL='postgres://music:<strong-random-password>@music-postgres:5432/music' \
-  --from-literal=JWT_SECRET='<random-256-bit-secret>'
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com sqladmin.googleapis.com artifactregistry.googleapis.com
 ```
 
-3. Apply manifests:
+Create secrets (example):
 
 ```bash
-kubectl apply -f k8s/postgres.yaml
-kubectl apply -f k8s/backend.yaml
-kubectl apply -f k8s/frontend.yaml
+printf '%s' '<database-url>' | gcloud secrets create neferkey-database-url --data-file=-
+printf '%s' '<jwt-secret>' | gcloud secrets create neferkey-jwt-secret --data-file=-
 ```
 
-Add a `PersistentVolumeClaim` and volume mount for `/app/uploads` in `k8s/backend.yaml` to persist uploaded files.
+Grant Cloud Run runtime service account permissions:
+
+- `roles/secretmanager.secretAccessor`
+- `roles/cloudsql.client` (when using Cloud SQL)
+- `roles/storage.objectAdmin` (or stricter bucket-scoped role for uploads)
+
+## Cloud Run architecture
+
+- `neferkey-music-backend` (Express API)
+- `neferkey-music-frontend` (static React build served by nginx)
+- Cloud SQL (PostgreSQL) used via `DATABASE_URL`
+- Secret Manager for secrets
+- Cloud Storage for uploaded media persistence
+
+## Smoke test checklist (post-deploy)
+
+- `GET /health` on backend returns `{"status":"ok"}`
+- Register + login works
+- Track list loads
+- Upload track + image works
+- Album create/add/remove works
+- CORS works between frontend and backend service URLs
+- Restart/redeploy backend and verify DB data still exists
+- Verify uploaded media remains available from Cloud Storage URLs
 
 ## Environment variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | `postgres://music:music@localhost:5432/music` | PostgreSQL connection string |
-| `JWT_SECRET` | `change-me-in-production` | Secret for signing JWT tokens — **change in production** |
-| `UPLOADS_DIR` | `<backend>/uploads` | Directory for uploaded audio and image files |
-| `PORT` | `3000` | Backend listen port |
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `JWT_SECRET` | JWT signing secret |
+| `PORT` | Backend listen port (default 3000) |
+| `UPLOADS_DIR` | Local upload path for dev mode |
+| `CORS_ORIGIN` | Comma-separated allowed browser origins |
+| `GCS_UPLOAD_BUCKET` | Enables Cloud Storage upload mode |
+| `GCS_UPLOAD_PREFIX` | Object prefix for uploaded files |
+| `VITE_API_BASE_URL` | Frontend build-time backend API base URL |
