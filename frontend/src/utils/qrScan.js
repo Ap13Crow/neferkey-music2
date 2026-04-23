@@ -1,6 +1,9 @@
 export function extractClaimToken(url) {
+  const raw = String(url ?? '').trim();
+  // Directly scanned claim tokens are 40-char hex strings.
+  if (/^[a-f0-9]{40}$/i.test(raw)) return raw;
   try {
-    const u = new URL(String(url ?? '').trim());
+    const u = new URL(raw);
     return u.searchParams.get('claim') || null;
   } catch {
     return null;
@@ -18,12 +21,6 @@ export function getScanSupportStatus(win = window) {
     return {
       supported: false,
       message: 'Camera access is not available in this browser. Please paste the URL manually.',
-    };
-  }
-  if (!('BarcodeDetector' in win)) {
-    return {
-      supported: false,
-      message: 'QR scanning is not supported in this browser. Please paste the URL manually.',
     };
   }
   return { supported: true, message: '' };

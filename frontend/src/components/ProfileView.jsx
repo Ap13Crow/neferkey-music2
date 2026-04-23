@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
@@ -6,6 +6,20 @@ export default function ProfileView({ user, token, onUserUpdate, onLogout }) {
   const [prefs, setPrefs] = useState(user?.preferences || {});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [purchases, setPurchases] = useState([]);
+  const [loadingPurchases, setLoadingPurchases] = useState(true);
+
+  useEffect(() => {
+    if (!token) return;
+    setLoadingPurchases(true);
+    fetch(`${API_BASE}/purchase-links/redeemed`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.ok ? r.json() : { purchases: [] })
+      .then((data) => setPurchases(data.purchases || []))
+      .catch(() => setPurchases([]))
+      .finally(() => setLoadingPurchases(false));
+  }, [token]);
 
   if (!user) {
     return (
@@ -93,6 +107,27 @@ export default function ProfileView({ user, token, onUserUpdate, onLogout }) {
       </div>
 
       <button className="btn btn-danger" onClick={onLogout}>Sign out</button>
+
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '1.25rem', marginTop: '1.25rem' }}>
+        <div style={{ fontWeight: 700, marginBottom: '0.75rem', fontSize: '0.9rem' }}>Redeemed purchases</div>
+        {loadingPurchases && <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Loading…</p>}
+        {!loadingPurchases && purchases.length === 0 && (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>No redeemed purchases yet.</p>
+        )}
+        {!loadingPurchases && purchases.map((p) => (
+          <div key={p.id} style={{ borderTop: '1px solid var(--border)', padding: '0.65rem 0' }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+              {p.resource_type === 'track'
+                ? (p.track_title || p.resource_key)
+                : (p.album_name || p.resource_key)}
+            </div>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+              {p.resource_type === 'track' ? p.track_artist : 'Album'} · Redeemed {new Date(p.purchased_at).toLocaleDateString()}
+              {p.label ? ` · ${p.label}` : ''}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

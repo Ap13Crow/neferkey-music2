@@ -13,6 +13,8 @@ test('extractClaimToken returns claim token from valid URL', () => {
   assert.equal(extractClaimToken('https://example.com/path?x=1&claim=abc123&y=2'), 'abc123');
   assert.equal(extractClaimToken('https://example.com/path?claim=abc123#section'), 'abc123');
   assert.equal(extractClaimToken('https://example.com/path?claim=a%2Bb%3Dc'), 'a+b=c');
+  assert.equal(extractClaimToken('0123456789abcdef0123456789abcdef01234567'), '0123456789abcdef0123456789abcdef01234567');
+  assert.equal(extractClaimToken('ABCDEF0123456789ABCDEF0123456789ABCDEF01'), 'ABCDEF0123456789ABCDEF0123456789ABCDEF01');
 });
 
 test('extractClaimToken returns null for invalid URL or missing claim', () => {
@@ -36,15 +38,6 @@ test('getScanSupportStatus validates secure context and capabilities', () => {
     getScanSupportStatus({
       isSecureContext: true,
       navigator: { mediaDevices: { getUserMedia: () => Promise.resolve({}) } },
-    }).supported,
-    false,
-  );
-
-  assert.equal(
-    getScanSupportStatus({
-      isSecureContext: true,
-      navigator: { mediaDevices: { getUserMedia: () => Promise.resolve({}) } },
-      BarcodeDetector: class {},
     }).supported,
     true,
   );

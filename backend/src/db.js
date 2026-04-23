@@ -97,12 +97,14 @@ async function initDb() {
       resource_key TEXT NOT NULL,
       label TEXT NOT NULL DEFAULT '',
       created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      target_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
       used_by UUID REFERENCES users(id) ON DELETE SET NULL,
       used_at TIMESTAMPTZ,
       expires_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+  await pool.query('ALTER TABLE purchase_links ADD COLUMN IF NOT EXISTS target_user_id UUID REFERENCES users(id) ON DELETE SET NULL');
 
   // User purchases — access grants from redeemed purchase links
   await pool.query(`

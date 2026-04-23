@@ -31,16 +31,22 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const result = await db.query(
       `SELECT a.*,
-        COALESCE(
-          json_agg(r.* ORDER BY at.position)
-          FILTER (WHERE r.url_key IS NOT NULL), '[]'
-        ) AS tracks
-       FROM albums a
-       LEFT JOIN album_tracks at ON at.album_id = a.id
-       LEFT JOIN records r ON r.url_key = at.track_key
-       WHERE a.owner_id = $1
-       GROUP BY a.id
-       ORDER BY a.created_at DESC`,
+         COALESCE(
+           json_agg(r.* ORDER BY at.position)
+           FILTER (WHERE r.url_key IS NOT NULL), '[]'
+         ) AS tracks,
+         (a.owner_id = $1) AS is_owned,
+         up.purchased_at
+        FROM albums a
+       LEFT JOIN user_purchases up
+         ON up.resource_type = 'album'
+         AND up.resource_key = a.id::text
+         AND up.user_id = $1
+        LEFT JOIN album_tracks at ON at.album_id = a.id
+        LEFT JOIN records r ON r.url_key = at.track_key
+        WHERE a.owner_id = $1 OR up.user_id = $1
+        GROUP BY a.id, up.purchased_at
+        ORDER BY COALESCE(up.purchased_at, a.created_at) DESC`,
       [req.user.userId],
     );
     return res.json({ albums: result.rows });

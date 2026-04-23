@@ -4,6 +4,8 @@ const db = require('../db');
 const { requireAuth, requireRole, ROLES } = require('../auth');
 
 const router = express.Router();
+// token, resource_type, resource_key, label, created_by, expires_at, target_user_id
+const PARAMS_PER_LINK = 7;
 
 /**
  * @openapi
@@ -34,13 +36,24 @@ const router = express.Router();
  *       404: { description: Resource not found }
  */
 router.post('/', requireAuth, requireRole(ROLES.ADMIN), async (req, res) => {
-  const { resource_type, resource_key, label = '', expires_at } = req.body;
+  const {
+    resource_type,
+    resource_key,
+    label = '',
+    expires_at,
+    target_user_id,
+    count,
+  } = req.body;
 
   if (!resource_type || !['track', 'album'].includes(resource_type)) {
     return res.status(400).json({ error: 'resource_type must be "track" or "album"' });
   }
   if (!resource_key || typeof resource_key !== 'string' || !resource_key.trim()) {
     return res.status(400).json({ error: 'resource_key is required' });
+  }
+  const normalizedCount = count === undefined ? 1 : Number(count);
+  if (!Number.isInteger(normalizedCount) || normalizedCount < 1 || normalizedCount > 200) {
+    return res.status(400).json({ error: 'count must be an integer between 1 and 200' });
   }
 
   try {
@@ -52,14 +65,43 @@ router.post('/', requireAuth, requireRole(ROLES.ADMIN), async (req, res) => {
       if (!r.rows.length) return res.status(404).json({ error: 'Album not found' });
     }
 
-    const token = crypto.randomBytes(20).toString('hex');
+    let targetUserId = null;
+    if (target_user_id?.toString().trim()) {
+      const target = await db.query(
+        'SELECT id FROM users WHERE id = $1 LIMIT 1',
+        [String(target_user_id).trim()],
+      );
+      if (!target.rows.length) return res.status(404).json({ error: 'Target user not found' });
+      targetUserId = target.rows[0].id;
+    }
+
+    const values = [];
+    const placeholders = [];
+    for (let i = 0; i < normalizedCount; i += 1) {
+      const token = crypto.randomBytes(20).toString('hex');
+      const paramOffset = i * PARAMS_PER_LINK;
+      placeholders.push(`($${paramOffset + 1}, $${paramOffset + 2}, $${paramOffset + 3}, $${paramOffset + 4}, $${paramOffset + 5}, $${paramOffset + 6}, $${paramOffset + 7})`);
+      values.push(
+        token,
+        resource_type,
+        resource_key.trim(),
+        label.trim(),
+        req.user.userId,
+        expires_at || null,
+        targetUserId,
+      );
+    }
     const result = await db.query(
-      `INSERT INTO purchase_links (token, resource_type, resource_key, label, created_by, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [token, resource_type, resource_key.trim(), label.trim(), req.user.userId, expires_at || null],
+      `INSERT INTO purchase_links (token, resource_type, resource_key, label, created_by, expires_at, target_user_id)
+       VALUES ${placeholders.join(', ')}
+       RETURNING *`,
+      values,
     );
 
-    return res.status(201).json({ link: result.rows[0] });
+    if (normalizedCount === 1) {
+      return res.status(201).json({ link: result.rows[0] });
+    }
+    return res.status(201).json({ links: result.rows, count: result.rows.length });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to create purchase link', detail: err.message });
   }
@@ -82,17 +124,49 @@ router.post('/', requireAuth, requireRole(ROLES.ADMIN), async (req, res) => {
 router.get('/', requireAuth, requireRole(ROLES.ADMIN), async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT pl.*,
-         u.username AS used_by_username,
-         c.username AS created_by_username
-       FROM purchase_links pl
-       LEFT JOIN users u ON u.id = pl.used_by
-       LEFT JOIN users c ON c.id = pl.created_by
-       ORDER BY pl.created_at DESC`,
+       `SELECT pl.*,
+          u.username AS used_by_username,
+          c.username AS created_by_username,
+          tu.username AS target_user_username
+        FROM purchase_links pl
+        LEFT JOIN users u ON u.id = pl.used_by
+        LEFT JOIN users c ON c.id = pl.created_by
+        LEFT JOIN users tu ON tu.id = pl.target_user_id
+        ORDER BY pl.created_at DESC`,
     );
     return res.json({ links: result.rows });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to fetch links', detail: err.message });
+  }
+});
+
+router.get('/redeemed', requireAuth, async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT
+         up.id,
+         up.resource_type,
+         up.resource_key,
+         up.purchased_at,
+         pl.label,
+         creator.username AS created_by_username,
+         r.title AS track_title,
+         r.artist AS track_artist,
+         r.image_url AS track_image_url,
+         a.name AS album_name,
+         a.cover_url AS album_cover_url
+       FROM user_purchases up
+       LEFT JOIN purchase_links pl ON pl.id = up.purchase_link_id
+       LEFT JOIN users creator ON creator.id = pl.created_by
+       LEFT JOIN records r ON up.resource_type = 'track' AND r.url_key = up.resource_key
+       LEFT JOIN albums a ON up.resource_type = 'album' AND a.id::text = up.resource_key
+       WHERE up.user_id = $1
+       ORDER BY up.purchased_at DESC`,
+      [req.user.userId],
+    );
+    return res.json({ purchases: result.rows });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch redeemed history', detail: err.message });
   }
 });
 
@@ -151,6 +225,7 @@ router.get('/:token', async (req, res) => {
       resource_key: link.resource_key,
       label: link.label,
       expires_at: link.expires_at,
+      target_user_id: link.target_user_id,
       resource,
     });
   } catch (err) {
@@ -190,6 +265,9 @@ router.post('/:token/redeem', requireAuth, async (req, res) => {
     if (link.used_at) return res.status(410).json({ error: 'This link has already been used' });
     if (link.expires_at && new Date(link.expires_at) < new Date()) {
       return res.status(410).json({ error: 'This link has expired' });
+    }
+    if (link.target_user_id && link.target_user_id !== userId) {
+      return res.status(403).json({ error: 'This link is assigned to a different user account' });
     }
 
     // Mark link as used
