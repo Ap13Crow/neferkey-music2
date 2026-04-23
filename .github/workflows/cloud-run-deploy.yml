@@ -183,25 +183,49 @@ jobs:
             docker.io/${{ env.FRONTEND_IMAGE_REPO }}:latest
             docker.io/${{ env.FRONTEND_IMAGE_REPO }}:${{ github.sha }}
 
+      - name: Check frontend deploy auth availability
+        id: check-frontend-auth
+        env:
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          if [ -z "${GCP_PROJECT_ID}" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Missing GCP_PROJECT_ID. Skipping frontend Cloud Run deployment."
+          elif [ -n "${GCP_WORKLOAD_IDENTITY_PROVIDER}" ] && [ -n "${GCP_SERVICE_ACCOUNT}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "auth_mode=workload_identity" >> "$GITHUB_OUTPUT"
+          elif [ -n "${GCP_SA_KEY}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "auth_mode=service_account_key" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Missing GCP auth secrets. Provide either GCP_WORKLOAD_IDENTITY_PROVIDER + GCP_SERVICE_ACCOUNT, or GCP_SA_KEY."
+          fi
+
       - name: Authenticate to Google Cloud (Workload Identity)
-        if: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && secrets.GCP_SERVICE_ACCOUNT != '' }}
+        if: steps.check-frontend-auth.outputs.enabled == 'true' && steps.check-frontend-auth.outputs.auth_mode == 'workload_identity'
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Authenticate to Google Cloud (Service Account Key)
-        if: ${{ !(secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && secrets.GCP_SERVICE_ACCOUNT != '') && secrets.GCP_SA_KEY != '' }}
+        if: steps.check-frontend-auth.outputs.enabled == 'true' && steps.check-frontend-auth.outputs.auth_mode == 'service_account_key'
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Setup gcloud
+        if: steps.check-frontend-auth.outputs.enabled == 'true'
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
       - name: Deploy frontend Cloud Run service
+        if: steps.check-frontend-auth.outputs.enabled == 'true'
         run: |
           gcloud run deploy "${FRONTEND_SERVICE_NAME}" \
             --image "docker.io/${FRONTEND_IMAGE_REPO}:${GITHUB_SHA}" \
