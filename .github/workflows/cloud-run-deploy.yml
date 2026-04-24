@@ -18,6 +18,56 @@ env:
   FRONTEND_SERVICE_NAME: neferkey-music-frontend
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      auth_mode: ${{ steps.validate.outputs.auth_mode }}
+    steps:
+      - name: Validate required GitHub secrets
+        id: validate
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_DATABASE_URL_SECRET_NAME: ${{ secrets.GCP_DATABASE_URL_SECRET_NAME }}
+          GCP_JWT_SECRET_NAME: ${{ secrets.GCP_JWT_SECRET_NAME }}
+        run: |
+          set -euo pipefail
+          missing=()
+          require_secret() {
+            local secret_name="$1"
+            local secret_value="$2"
+            if [ -z "$secret_value" ]; then
+              missing+=("${secret_name}")
+            fi
+          }
+
+          require_secret "DOCKERHUB_USERNAME" "${DOCKERHUB_USERNAME}"
+          require_secret "DOCKERHUB_TOKEN" "${DOCKERHUB_TOKEN}"
+          require_secret "GCP_PROJECT_ID" "${GCP_PROJECT_ID}"
+          require_secret "GCP_DATABASE_URL_SECRET_NAME" "${GCP_DATABASE_URL_SECRET_NAME}"
+          require_secret "GCP_JWT_SECRET_NAME" "${GCP_JWT_SECRET_NAME}"
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing required GitHub Actions secrets: ${missing[*]}."
+            echo "::error::Add them in GitHub: Settings -> Secrets and variables -> Actions -> New repository secret."
+            exit 1
+          fi
+
+          if [ -n "${GCP_WORKLOAD_IDENTITY_PROVIDER}" ] && [ -n "${GCP_SERVICE_ACCOUNT}" ]; then
+            echo "auth_mode=workload_identity" >> "$GITHUB_OUTPUT"
+          elif [ -n "${GCP_SA_KEY}" ]; then
+            echo "auth_mode=service_account_key" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Missing GCP authentication secrets. Set either GCP_WORKLOAD_IDENTITY_PROVIDER + GCP_SERVICE_ACCOUNT, or GCP_SA_KEY."
+            exit 1
+          fi
+
+          echo "All required deploy secrets are configured."
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -43,7 +93,7 @@ jobs:
           npm run build
 
   build-backend:
-    needs: test
+    needs: [test, preflight]
     runs-on: ubuntu-latest
     outputs:
       backend_image_sha: ${{ steps.meta.outputs.backend_image_sha }}
@@ -76,57 +126,31 @@ jobs:
             docker.io/${{ env.BACKEND_IMAGE_REPO }}:${{ github.sha }}
 
   deploy-backend:
-    needs: build-backend
+    needs: [build-backend, preflight]
     runs-on: ubuntu-latest
     outputs:
       backend_url: ${{ steps.deploy.outputs.backend_url }}
     steps:
-      - name: Check deploy secret availability
-        id: check
-        env:
-          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          GCP_DATABASE_URL_SECRET_NAME: ${{ secrets.GCP_DATABASE_URL_SECRET_NAME }}
-          GCP_JWT_SECRET_NAME: ${{ secrets.GCP_JWT_SECRET_NAME }}
-        run: |
-          if [ -z "${GCP_PROJECT_ID}" ] || [ -z "${GCP_DATABASE_URL_SECRET_NAME}" ] || [ -z "${GCP_JWT_SECRET_NAME}" ]; then
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "Missing required GCP deploy secrets. Skipping Cloud Run deployment."
-          elif [ -n "${GCP_WORKLOAD_IDENTITY_PROVIDER}" ] && [ -n "${GCP_SERVICE_ACCOUNT}" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "auth_mode=workload_identity" >> "$GITHUB_OUTPUT"
-          elif [ -n "${GCP_SA_KEY}" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "auth_mode=service_account_key" >> "$GITHUB_OUTPUT"
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "Missing GCP auth secrets. Provide either GCP_WORKLOAD_IDENTITY_PROVIDER + GCP_SERVICE_ACCOUNT, or GCP_SA_KEY."
-          fi
-
       - name: Authenticate to Google Cloud (Workload Identity)
-        if: steps.check.outputs.enabled == 'true' && steps.check.outputs.auth_mode == 'workload_identity'
+        if: needs.preflight.outputs.auth_mode == 'workload_identity'
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Authenticate to Google Cloud (Service Account Key)
-        if: steps.check.outputs.enabled == 'true' && steps.check.outputs.auth_mode == 'service_account_key'
+        if: needs.preflight.outputs.auth_mode == 'service_account_key'
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Setup gcloud
-        if: steps.check.outputs.enabled == 'true'
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
       - name: Deploy backend Cloud Run service
         id: deploy
-        if: steps.check.outputs.enabled == 'true'
         env:
           BACKEND_IMAGE: docker.io/${{ env.BACKEND_IMAGE_REPO }}:${{ github.sha }}
           DATABASE_URL_SECRET: ${{ secrets.GCP_DATABASE_URL_SECRET_NAME }}
@@ -156,9 +180,8 @@ jobs:
           echo "backend_url=${BACKEND_URL}" >> "$GITHUB_OUTPUT"
 
   build-and-deploy-frontend:
-    needs: [deploy-backend]
+    needs: [deploy-backend, preflight]
     runs-on: ubuntu-latest
-    if: ${{ needs.deploy-backend.outputs.backend_url != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -183,49 +206,25 @@ jobs:
             docker.io/${{ env.FRONTEND_IMAGE_REPO }}:latest
             docker.io/${{ env.FRONTEND_IMAGE_REPO }}:${{ github.sha }}
 
-      - name: Check frontend deploy auth availability
-        id: check-frontend-auth
-        env:
-          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-        run: |
-          if [ -z "${GCP_PROJECT_ID}" ]; then
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "Missing GCP_PROJECT_ID. Skipping frontend Cloud Run deployment."
-          elif [ -n "${GCP_WORKLOAD_IDENTITY_PROVIDER}" ] && [ -n "${GCP_SERVICE_ACCOUNT}" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "auth_mode=workload_identity" >> "$GITHUB_OUTPUT"
-          elif [ -n "${GCP_SA_KEY}" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "auth_mode=service_account_key" >> "$GITHUB_OUTPUT"
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "Missing GCP auth secrets. Provide either GCP_WORKLOAD_IDENTITY_PROVIDER + GCP_SERVICE_ACCOUNT, or GCP_SA_KEY."
-          fi
-
       - name: Authenticate to Google Cloud (Workload Identity)
-        if: steps.check-frontend-auth.outputs.enabled == 'true' && steps.check-frontend-auth.outputs.auth_mode == 'workload_identity'
+        if: needs.preflight.outputs.auth_mode == 'workload_identity'
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Authenticate to Google Cloud (Service Account Key)
-        if: steps.check-frontend-auth.outputs.enabled == 'true' && steps.check-frontend-auth.outputs.auth_mode == 'service_account_key'
+        if: needs.preflight.outputs.auth_mode == 'service_account_key'
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Setup gcloud
-        if: steps.check-frontend-auth.outputs.enabled == 'true'
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
       - name: Deploy frontend Cloud Run service
-        if: steps.check-frontend-auth.outputs.enabled == 'true'
         run: |
           gcloud run deploy "${FRONTEND_SERVICE_NAME}" \
             --image "docker.io/${FRONTEND_IMAGE_REPO}:${GITHUB_SHA}" \

@@ -102,6 +102,15 @@ Google Cloud:
 - `GCP_CLOUD_SQL_CONNECTION_NAME` (optional if not using Cloud SQL socket)
 - `GCP_GCS_UPLOAD_BUCKET` (optional, recommended)
 
+### Where to configure GitHub Secrets
+
+In this repository:
+
+1. Open **Settings** → **Secrets and variables** → **Actions**
+2. Click **New repository secret**
+3. Add each secret listed above exactly with the same name
+4. Re-run workflow **CI + Docker Hub + Cloud Run**
+
 ## Google Cloud setup (project: `Neferkey-Music-App`)
 
 Enable APIs:
@@ -122,6 +131,13 @@ Grant Cloud Run runtime service account permissions:
 - `roles/secretmanager.secretAccessor`
 - `roles/cloudsql.client` (when using Cloud SQL)
 - `roles/storage.objectAdmin` (or stricter bucket-scoped role for uploads)
+
+Grant GitHub deploy identity permissions (service account used by Actions):
+
+- `roles/run.admin`
+- `roles/iam.serviceAccountUser`
+- `roles/secretmanager.secretAccessor`
+- `roles/storage.admin` (or bucket-scoped equivalent for upload bucket)
 
 ## Cloud Run architecture
 
