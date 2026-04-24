@@ -109,7 +109,7 @@ In this repository:
 1. Open **Settings** → **Secrets and variables** → **Actions**
 2. Click **New repository secret**
 3. Add each secret listed above exactly with the same name
-4. Re-run workflow **CI + Docker Hub + Cloud Run**
+4. Re-run this workflow from the **Actions** tab
 
 ## Google Cloud setup (project: `Neferkey-Music-App`)
 

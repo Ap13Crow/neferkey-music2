@@ -36,12 +36,16 @@ jobs:
           GCP_JWT_SECRET_NAME: ${{ secrets.GCP_JWT_SECRET_NAME }}
         run: |
           set -euo pipefail
-          missing=()
+          missing=""
           require_secret() {
             local secret_name="$1"
             local secret_value="$2"
             if [ -z "$secret_value" ]; then
-              missing+=("${secret_name}")
+              if [ -z "${missing}" ]; then
+                missing="${secret_name}"
+              else
+                missing="${missing} ${secret_name}"
+              fi
             fi
           }
 
@@ -51,8 +55,8 @@ jobs:
           require_secret "GCP_DATABASE_URL_SECRET_NAME" "${GCP_DATABASE_URL_SECRET_NAME}"
           require_secret "GCP_JWT_SECRET_NAME" "${GCP_JWT_SECRET_NAME}"
 
-          if [ "${#missing[@]}" -gt 0 ]; then
-            echo "::error::Missing required GitHub Actions secrets: ${missing[*]}."
+          if [ -n "${missing}" ]; then
+            echo "::error::Missing required GitHub Actions secrets: ${missing}."
             echo "::error::Add them in GitHub: Settings -> Secrets and variables -> Actions -> New repository secret."
             exit 1
           fi
@@ -182,6 +186,7 @@ jobs:
   build-and-deploy-frontend:
     needs: [deploy-backend, preflight]
     runs-on: ubuntu-latest
+    if: ${{ needs.deploy-backend.outputs.backend_url != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
