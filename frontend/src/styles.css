@@ -798,6 +798,14 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
   font-size: 0.82rem;
   color: #fca5a5;
 }
+.auth-message {
+  padding: 0.65rem 0.85rem;
+  background: rgba(22, 163, 74, 0.2);
+  border: 1px solid #15803d;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  color: #86efac;
+}
 .auth-btn {
   margin-top: 0.5rem;
   padding: 0.7rem;

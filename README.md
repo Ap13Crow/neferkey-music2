@@ -161,4 +161,4 @@ Grant Cloud Run runtime service account permissions:
 | `SMTP_PASSWORD` | SMTP password/app password |
 | `SMTP_FROM_EMAIL` | Sender email address for verification emails |
 | `SMTP_FROM_NAME` | Sender display name |
-| `EMAIL_VERIFICATION_URL_BASE` | Public backend base URL used to generate `/api/auth/verify-email` links |
+| `EMAIL_VERIFICATION_URL_BASE` | Public backend base URL used to generate `/api/auth/verify-email` links (required when SMTP is enabled) |

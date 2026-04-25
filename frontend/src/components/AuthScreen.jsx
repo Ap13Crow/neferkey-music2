@@ -68,7 +68,7 @@ export default function AuthScreen({ onAuth, defaultTab = 'login' }) {
 
         <form className="auth-form" onSubmit={handleSubmit}>
           {error && <div className="auth-error">{error}</div>}
-          {message && <div style={{ color: '#8ee38e', fontSize: '0.95rem' }}>{message}</div>}
+          {message && <div className="auth-message">{message}</div>}
 
           {tab === 'register' && (
             <div className="form-group">

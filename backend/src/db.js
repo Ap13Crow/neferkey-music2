@@ -32,7 +32,16 @@ async function initDb() {
   await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false');
   await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_token_hash TEXT');
   await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_expires_at TIMESTAMPTZ');
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_email_verification_token_hash ON users (email_verification_token_hash)`);
+  await pool.query(
+    `UPDATE users
+     SET email_verified = true
+     WHERE email_verified = false
+       AND email_verification_token_hash IS NULL
+       AND email_verification_expires_at IS NULL`,
+  );
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS idx_users_email_verification_token_hash ON users (email_verification_token_hash) WHERE email_verification_token_hash IS NOT NULL',
+  );
   // Ensure designated admin account always has admin role
   await pool.query(
     `UPDATE users SET role = 'admin' WHERE lower(email) = lower($1)`,

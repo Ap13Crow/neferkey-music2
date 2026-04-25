@@ -180,6 +180,63 @@ describe('auth routes', () => {
     expect(nodemailer.createTransport).toHaveBeenCalledTimes(1);
     const transport = nodemailer.createTransport.mock.results[0].value;
     expect(transport.sendMail).toHaveBeenCalledTimes(1);
+    expect(transport.sendMail).toHaveBeenCalledWith(expect.objectContaining({
+      to: 'mail@example.com',
+      subject: 'Verify your Neferkey Music account',
+    }));
+  });
+
+  it('rejects SMTP registration when EMAIL_VERIFICATION_URL_BASE is missing', async () => {
+    process.env.SMTP_HOST = 'mail.example.com';
+    process.env.SMTP_PORT = '587';
+    process.env.SMTP_USER = 'smtp-user';
+    process.env.SMTP_PASSWORD = 'smtp-pass';
+    process.env.SMTP_FROM_EMAIL = 'no-reply@example.com';
+
+    const response = await request(app)
+      .post('/api/auth/register')
+      .send({ username: 'mailuser', email: 'mail@example.com', password: 'password123' });
+
+    expect(response.status).toBe(500);
+    expect(response.body.error).toContain('EMAIL_VERIFICATION_URL_BASE');
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('rolls back account if verification email send fails', async () => {
+    process.env.SMTP_HOST = 'mail.example.com';
+    process.env.SMTP_PORT = '587';
+    process.env.SMTP_USER = 'smtp-user';
+    process.env.SMTP_PASSWORD = 'smtp-pass';
+    process.env.SMTP_FROM_EMAIL = 'no-reply@example.com';
+    process.env.SMTP_FROM_NAME = 'Neferkey';
+    process.env.EMAIL_VERIFICATION_URL_BASE = 'https://api.example.com';
+
+    nodemailer.createTransport.mockReturnValueOnce({
+      sendMail: jest.fn().mockRejectedValue(new Error('SMTP unavailable')),
+    });
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{
+          id: 'user-uuid-rollback',
+          username: 'mailuser',
+          email: 'mail@example.com',
+          preferences: {},
+          role: 'user',
+          email_verified: false,
+          created_at: new Date(),
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const response = await request(app)
+      .post('/api/auth/register')
+      .send({ username: 'mailuser', email: 'mail@example.com', password: 'password123' });
+    consoleErrorSpy.mockRestore();
+
+    expect(response.status).toBe(500);
+    expect(response.body.error).toContain('could not send verification email');
+    expect(db.query).toHaveBeenLastCalledWith('DELETE FROM users WHERE id = $1', ['user-uuid-rollback']);
   });
 
   it('rejects registration with short password', async () => {
@@ -265,6 +322,16 @@ describe('auth routes', () => {
     expect(response.status).toBe(200);
     expect(response.body.token).toBe('mock-token');
     expect(response.body.user.email_verified).toBe(true);
+  });
+
+  it('rejects verify-email for invalid or expired token', async () => {
+    db.query.mockResolvedValueOnce({ rows: [] });
+
+    const response = await request(app)
+      .get('/api/auth/verify-email?token=invalid-token');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Invalid or expired');
   });
 
   it('returns 401 for protected route without token', async () => {

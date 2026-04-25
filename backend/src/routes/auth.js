@@ -10,8 +10,8 @@ const {
 
 const router = express.Router();
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+const VERIFICATION_TOKEN_BYTES = 32;
 
 function isSmtpConfigured() {
   return Boolean(
@@ -43,10 +43,40 @@ function hashVerificationToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-function buildVerificationUrl(req, token) {
-  const explicitBase = String(process.env.EMAIL_VERIFICATION_URL_BASE || '').trim();
-  const origin = explicitBase || `${req.protocol}://${req.get('host')}`;
-  return `${origin.replace(/\/$/, '')}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
+function buildVerificationUrl(token) {
+  const configuredBaseUrl = String(process.env.EMAIL_VERIFICATION_URL_BASE || '').trim();
+  if (!/^https?:\/\//i.test(configuredBaseUrl)) {
+    throw new Error('EMAIL_VERIFICATION_URL_BASE must start with http:// or https://');
+  }
+  return `${configuredBaseUrl.replace(/\/$/, '')}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
+}
+
+function isValidEmail(email) {
+  if (typeof email !== 'string') return false;
+  const value = email.trim();
+  const atPos = value.indexOf('@');
+  if (atPos <= 0 || atPos !== value.lastIndexOf('@') || atPos === value.length - 1) {
+    return false;
+  }
+  const domain = value.slice(atPos + 1);
+  const dotPos = domain.indexOf('.');
+  return dotPos > 0 && dotPos < domain.length - 1;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function sanitizeDisplayName(value) {
+  return String(value || '')
+    .replace(/[\r\n]/g, ' ')
+    .replace(/[<>"]/g, '')
+    .trim() || 'Neferkey Music App';
 }
 
 /**
@@ -83,7 +113,7 @@ router.post('/register', async (req, res) => {
   if (!username || !email || !password) {
     return res.status(400).json({ error: 'username, email and password are required' });
   }
-  if (!EMAIL_REGEX.test(String(email).trim())) {
+  if (!isValidEmail(email)) {
     return res.status(400).json({ error: 'Invalid email format' });
   }
   if (password.length < 8) {
@@ -94,7 +124,10 @@ router.post('/register', async (req, res) => {
     const role = normalizedEmail === DEFAULT_ADMIN_EMAIL ? ROLES.ADMIN : ROLES.USER;
     const hash = await bcrypt.hash(password, 12);
     const smtpEnabled = isSmtpConfigured();
-    const verificationToken = smtpEnabled ? crypto.randomBytes(32).toString('hex') : null;
+    if (smtpEnabled && !String(process.env.EMAIL_VERIFICATION_URL_BASE || '').trim()) {
+      return res.status(500).json({ error: 'EMAIL_VERIFICATION_URL_BASE must be set when SMTP is enabled' });
+    }
+    const verificationToken = smtpEnabled ? crypto.randomBytes(VERIFICATION_TOKEN_BYTES).toString('hex') : null;
     const verificationTokenHash = verificationToken ? hashVerificationToken(verificationToken) : null;
     const verificationExpiresAt = verificationToken
       ? new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS)
@@ -106,11 +139,15 @@ router.post('/register', async (req, res) => {
     );
     const user = result.rows[0];
     if (smtpEnabled && verificationToken) {
-      const verificationUrl = buildVerificationUrl(req, verificationToken);
+      const verificationUrl = buildVerificationUrl(verificationToken);
+      const safeVerificationUrl = escapeHtml(verificationUrl);
       const transporter = createMailer();
       try {
         await transporter.sendMail({
-          from: `"${process.env.SMTP_FROM_NAME || 'Neferkey Music App'}" <${process.env.SMTP_FROM_EMAIL}>`,
+          from: {
+            name: sanitizeDisplayName(process.env.SMTP_FROM_NAME),
+            address: process.env.SMTP_FROM_EMAIL,
+          },
           to: normalizedEmail,
           subject: 'Verify your Neferkey Music account',
           text:
@@ -119,11 +156,19 @@ router.post('/register', async (req, res) => {
             + 'If you did not create this account, you can ignore this email.',
           html:
             '<p>Welcome to Neferkey Music.</p>'
-            + `<p>Please verify your account by clicking this link:</p><p><a href="${verificationUrl}">${verificationUrl}</a></p>`
+            + `<p>Please verify your account by clicking this link:</p><p><a href="${safeVerificationUrl}">${safeVerificationUrl}</a></p>`
             + '<p>If you did not create this account, you can ignore this email.</p>',
         });
-      } catch {
-        return res.status(500).json({ error: 'Registration created, but failed to send verification email' });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('SMTP verification email send failed for registration:', err?.message || 'unknown error');
+        try {
+          await db.query('DELETE FROM users WHERE id = $1', [user.id]);
+        } catch (cleanupErr) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to rollback user after SMTP send failure:', cleanupErr?.message || 'unknown error');
+        }
+        return res.status(500).json({ error: 'Registration failed: could not send verification email' });
       }
       return res.status(201).json({
         message: 'Registration successful. Please check your email to verify your account before signing in.',
@@ -135,6 +180,8 @@ router.post('/register', async (req, res) => {
     if (err.code === '23505') {
       return res.status(409).json({ error: 'Username or email already taken' });
     }
+    // eslint-disable-next-line no-console
+    console.error('Registration failed', err);
     return res.status(500).json({ error: 'Registration failed' });
   }
 });
@@ -191,7 +238,9 @@ router.post('/login', async (req, res) => {
     const token = signToken({ userId: user.id, username: user.username, role: user.role });
     const { password_hash: _h, ...safeUser } = user;
     return res.json({ token, user: safeUser });
-  } catch {
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Login failed', err);
     return res.status(500).json({ error: 'Login failed' });
   }
 });
@@ -245,7 +294,9 @@ router.get('/verify-email', async (req, res) => {
       token: authToken,
       user,
     });
-  } catch {
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Email verification failed', err);
     return res.status(500).json({ error: 'Verification failed' });
   }
 });
