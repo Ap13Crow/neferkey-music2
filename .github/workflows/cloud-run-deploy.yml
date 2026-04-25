@@ -2,7 +2,7 @@ name: CI + Docker Hub + Cloud Run
 
 on:
   push:
-    branches: [main]
+    branches: [main, copilot/enhance-frontend-for-music-player]
     tags: ['v*']
   workflow_dispatch:
 
