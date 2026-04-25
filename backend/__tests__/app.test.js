@@ -14,8 +14,15 @@ jest.mock('jsonwebtoken', () => ({
   verify: jest.fn().mockReturnValue({ userId: 'user-uuid-1', username: 'testuser', role: 'user' }),
 }));
 
+jest.mock('nodemailer', () => ({
+  createTransport: jest.fn(() => ({
+    sendMail: jest.fn().mockResolvedValue({ messageId: 'mock-message-id' }),
+  })),
+}));
+
 const db = require('../src/db');
 const app = require('../src/app');
+const nodemailer = require('nodemailer');
 
 const AUTH_HEADER = { Authorization: 'Bearer mock-token' };
 
@@ -58,7 +65,25 @@ describe('music API — legacy routes', () => {
 });
 
 describe('auth routes', () => {
+  const envBackup = { ...process.env };
+
+  function resetSmtpEnv() {
+    delete process.env.SMTP_HOST;
+    delete process.env.SMTP_PORT;
+    delete process.env.SMTP_SECURE;
+    delete process.env.SMTP_USER;
+    delete process.env.SMTP_PASSWORD;
+    delete process.env.SMTP_FROM_EMAIL;
+    delete process.env.SMTP_FROM_NAME;
+    delete process.env.EMAIL_VERIFICATION_URL_BASE;
+  }
+
+  beforeEach(() => {
+    resetSmtpEnv();
+  });
+
   afterEach(() => {
+    process.env = { ...envBackup };
     jest.clearAllMocks();
   });
 
@@ -95,8 +120,8 @@ describe('auth routes', () => {
     expect(response.status).toBe(201);
     expect(response.body.user.role).toBe('admin');
     expect(db.query).toHaveBeenCalledWith(
-      expect.stringContaining('password_hash, role'),
-      ['adminuser', 'admin@apollon.care', 'hashed', 'admin'],
+      expect.stringContaining('password_hash, role, email_verified'),
+      ['adminuser', 'admin@apollon.care', 'hashed', 'admin', true, null, null],
     );
   });
 
@@ -119,9 +144,42 @@ describe('auth routes', () => {
     expect(response.status).toBe(201);
     expect(response.body.user.role).toBe('admin');
     expect(db.query).toHaveBeenCalledWith(
-      expect.stringContaining('password_hash, role'),
-      ['adminupper', 'admin@apollon.care', 'hashed', 'admin'],
+      expect.stringContaining('password_hash, role, email_verified'),
+      ['adminupper', 'admin@apollon.care', 'hashed', 'admin', true, null, null],
     );
+  });
+
+  it('sends verification email on register when SMTP is configured', async () => {
+    process.env.SMTP_HOST = 'mail.example.com';
+    process.env.SMTP_PORT = '587';
+    process.env.SMTP_USER = 'smtp-user';
+    process.env.SMTP_PASSWORD = 'smtp-pass';
+    process.env.SMTP_FROM_EMAIL = 'no-reply@example.com';
+    process.env.SMTP_FROM_NAME = 'Neferkey';
+    process.env.EMAIL_VERIFICATION_URL_BASE = 'https://api.example.com';
+
+    db.query.mockResolvedValueOnce({
+      rows: [{
+        id: 'user-uuid-4',
+        username: 'mailuser',
+        email: 'mail@example.com',
+        preferences: {},
+        role: 'user',
+        email_verified: false,
+        created_at: new Date(),
+      }],
+    });
+
+    const response = await request(app)
+      .post('/api/auth/register')
+      .send({ username: 'mailuser', email: 'mail@example.com', password: 'password123' });
+
+    expect(response.status).toBe(201);
+    expect(response.body.token).toBeUndefined();
+    expect(response.body.message).toContain('Please check your email');
+    expect(nodemailer.createTransport).toHaveBeenCalledTimes(1);
+    const transport = nodemailer.createTransport.mock.results[0].value;
+    expect(transport.sendMail).toHaveBeenCalledTimes(1);
   });
 
   it('rejects registration with short password', async () => {
@@ -136,7 +194,7 @@ describe('auth routes', () => {
     db.query.mockResolvedValueOnce({
       rows: [{
         id: 'user-uuid-1', username: 'testuser', email: 'test@example.com',
-        password_hash: 'hashed', preferences: {}, role: 'user', created_at: new Date(),
+        password_hash: 'hashed', preferences: {}, role: 'user', email_verified: true, created_at: new Date(),
       }],
     });
 
@@ -155,7 +213,7 @@ describe('auth routes', () => {
     db.query.mockResolvedValueOnce({
       rows: [{
         id: 'user-uuid-1', username: 'testuser', email: 'test@example.com',
-        password_hash: 'hashed', preferences: {}, role: 'user', created_at: new Date(),
+        password_hash: 'hashed', preferences: {}, role: 'user', email_verified: true, created_at: new Date(),
       }],
     });
 
@@ -164,6 +222,49 @@ describe('auth routes', () => {
       .send({ email: 'test@example.com', password: 'wrongpass' });
 
     expect(response.status).toBe(401);
+  });
+
+  it('rejects login when email is not verified', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{
+        id: 'user-uuid-9',
+        username: 'pending-user',
+        email: 'pending@example.com',
+        password_hash: 'hashed',
+        preferences: {},
+        role: 'user',
+        email_verified: false,
+        created_at: new Date(),
+      }],
+    });
+
+    const response = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'pending@example.com', password: 'password123' });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toContain('Email not verified');
+  });
+
+  it('verifies email token and returns auth token', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{
+        id: 'user-uuid-10',
+        username: 'verified',
+        email: 'verified@example.com',
+        preferences: {},
+        role: 'user',
+        email_verified: true,
+        created_at: new Date(),
+      }],
+    });
+
+    const response = await request(app)
+      .get('/api/auth/verify-email?token=abc123');
+
+    expect(response.status).toBe(200);
+    expect(response.body.token).toBe('mock-token');
+    expect(response.body.user.email_verified).toBe(true);
   });
 
   it('returns 401 for protected route without token', async () => {
