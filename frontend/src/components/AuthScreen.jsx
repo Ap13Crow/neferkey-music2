@@ -6,6 +6,7 @@ export default function AuthScreen({ onAuth, defaultTab = 'login' }) {
   const [tab, setTab] = useState(defaultTab);
   const [form, setForm] = useState({ username: '', email: '', password: '' });
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   function set(field) {
@@ -15,6 +16,7 @@ export default function AuthScreen({ onAuth, defaultTab = 'login' }) {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setMessage('');
     setLoading(true);
     try {
       const endpoint = tab === 'login' ? '/auth/login' : '/auth/register';
@@ -30,6 +32,12 @@ export default function AuthScreen({ onAuth, defaultTab = 'login' }) {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || 'Something went wrong');
+        return;
+      }
+      if (tab === 'register' && (!data.token || !data.user)) {
+        setMessage(data.message || 'Account created. Please verify your email before signing in.');
+        setTab('login');
+        setForm((f) => ({ ...f, password: '' }));
         return;
       }
       localStorage.setItem('nk_token', data.token);
@@ -50,16 +58,17 @@ export default function AuthScreen({ onAuth, defaultTab = 'login' }) {
         </div>
 
         <div className="auth-tabs">
-          <button className={`auth-tab${tab === 'login' ? ' active' : ''}`} onClick={() => { setTab('login'); setError(''); }}>
+          <button className={`auth-tab${tab === 'login' ? ' active' : ''}`} onClick={() => { setTab('login'); setError(''); setMessage(''); }}>
             Sign in
           </button>
-          <button className={`auth-tab${tab === 'register' ? ' active' : ''}`} onClick={() => { setTab('register'); setError(''); }}>
+          <button className={`auth-tab${tab === 'register' ? ' active' : ''}`} onClick={() => { setTab('register'); setError(''); setMessage(''); }}>
             Create account
           </button>
         </div>
 
         <form className="auth-form" onSubmit={handleSubmit}>
           {error && <div className="auth-error">{error}</div>}
+          {message && <div className="auth-message">{message}</div>}
 
           {tab === 'register' && (
             <div className="form-group">

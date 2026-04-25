@@ -134,7 +134,7 @@ Grant Cloud Run runtime service account permissions:
 ## Smoke test checklist (post-deploy)
 
 - `GET /health` on backend returns `{"status":"ok"}`
-- Register + login works
+- Register + verify-email + login works
 - Track list loads
 - Upload track + image works
 - Album create/add/remove works
@@ -154,3 +154,11 @@ Grant Cloud Run runtime service account permissions:
 | `GCS_UPLOAD_BUCKET` | Enables Cloud Storage upload mode |
 | `GCS_UPLOAD_PREFIX` | Object prefix for uploaded files |
 | `VITE_API_BASE_URL` | Frontend build-time backend API base URL |
+| `SMTP_HOST` | SMTP host for account verification emails |
+| `SMTP_PORT` | SMTP port (typically `587` with STARTTLS) |
+| `SMTP_SECURE` | `true` for implicit TLS, `false` for STARTTLS |
+| `SMTP_USER` | SMTP username |
+| `SMTP_PASSWORD` | SMTP password/app password |
+| `SMTP_FROM_EMAIL` | Sender email address for verification emails |
+| `SMTP_FROM_NAME` | Sender display name |
+| `EMAIL_VERIFICATION_URL_BASE` | Public backend base URL used to generate `/api/auth/verify-email` links (required when SMTP is enabled) |

@@ -41,8 +41,8 @@ const swaggerSpec = swaggerJsdoc({
       version: '1.0.0',
       description:
         'REST API for the Neferkey music player. Supports authentication, track management, album management, and user account operations.\n\n' +
-        '**Authentication**: Most write endpoints and user-scoped reads require a Bearer JWT obtained from `/api/auth/login` or `/api/auth/register`.\n\n' +
-        '**Getting a Token**: 1) Call POST `/api/auth/register` or `/api/auth/login`, 2) Copy the `token` value from the response, 3) Click the "Authorize" button (top-right), paste the token, 4) Click "Authorize" in the dialog.\n\n' +
+        '**Authentication**: Most write endpoints and user-scoped reads require a Bearer JWT obtained from `/api/auth/login` (or from `/api/auth/verify-email` after registration).\n\n' +
+        '**Getting a Token**: 1) Register, 2) Verify your email using `/api/auth/verify-email`, 3) Login (or use token returned by verify endpoint), 4) Click the "Authorize" button (top-right), paste the token, 5) Click "Authorize" in the dialog.\n\n' +
         '**Roles** (current): `user` (default), `artist`, `composer`, `manager`, `admin`. Future route gates will use these roles.',
       contact: { name: 'Neferkey' },
     },
@@ -65,6 +65,7 @@ const swaggerSpec = swaggerJsdoc({
             email: { type: 'string', format: 'email' },
             preferences: { type: 'object' },
             role: { type: 'string', enum: ['user', 'artist', 'composer', 'manager', 'admin'] },
+            email_verified: { type: 'boolean' },
             created_at: { type: 'string', format: 'date-time' },
           },
         },
@@ -73,6 +74,7 @@ const swaggerSpec = swaggerJsdoc({
           properties: {
             token: { type: 'string', description: 'JWT bearer token' },
             user: { $ref: '#/components/schemas/User' },
+            message: { type: 'string' },
           },
         },
         Track: {

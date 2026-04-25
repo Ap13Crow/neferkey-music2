@@ -20,12 +20,28 @@ async function initDb() {
       password_hash TEXT NOT NULL,
       preferences JSONB NOT NULL DEFAULT '{}',
       role TEXT NOT NULL DEFAULT 'user',
+      email_verified BOOLEAN NOT NULL DEFAULT false,
+      email_verification_token_hash TEXT,
+      email_verification_expires_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 
   // Add role column for existing deployments
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'`);
+  await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false');
+  await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_token_hash TEXT');
+  await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_expires_at TIMESTAMPTZ');
+  await pool.query(
+    `UPDATE users
+     SET email_verified = true
+     WHERE email_verified = false
+       AND email_verification_token_hash IS NULL
+       AND email_verification_expires_at IS NULL`,
+  );
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS idx_users_email_verification_token_hash ON users (email_verification_token_hash) WHERE email_verification_token_hash IS NOT NULL',
+  );
   // Ensure designated admin account always has admin role
   await pool.query(
     `UPDATE users SET role = 'admin' WHERE lower(email) = lower($1)`,
