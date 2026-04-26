@@ -3,13 +3,14 @@ const { initDb } = require('./db');
 
 const port = Number(process.env.PORT || 3000);
 const isProduction = process.env.NODE_ENV === 'production';
-const dbInitRetryAttempts = Number.parseInt(process.env.DB_INIT_RETRY_ATTEMPTS || '10', 10);
-const dbInitRetryDelayMs = Number.parseInt(process.env.DB_INIT_RETRY_DELAY_MS || '2000', 10);
-const safeDbInitRetryAttempts = Number.isFinite(dbInitRetryAttempts) && dbInitRetryAttempts > 0
-  ? dbInitRetryAttempts
+const RETRYABLE_DB_ERROR_CODES = ['EAI_AGAIN', 'ENOTFOUND', 'ECONNREFUSED', 'ETIMEDOUT'];
+const rawDbInitRetryAttempts = Number.parseInt(process.env.DB_INIT_RETRY_ATTEMPTS || '10', 10);
+const rawDbInitRetryDelayMs = Number.parseInt(process.env.DB_INIT_RETRY_DELAY_MS || '2000', 10);
+const safeDbInitRetryAttempts = Number.isFinite(rawDbInitRetryAttempts) && rawDbInitRetryAttempts > 0
+  ? rawDbInitRetryAttempts
   : 10;
-const safeDbInitRetryDelayMs = Number.isFinite(dbInitRetryDelayMs) && dbInitRetryDelayMs >= 0
-  ? dbInitRetryDelayMs
+const safeDbInitRetryDelayMs = Number.isFinite(rawDbInitRetryDelayMs) && rawDbInitRetryDelayMs >= 0
+  ? rawDbInitRetryDelayMs
   : 2000;
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'change-me-in-production') {
@@ -25,7 +26,7 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'change-me-in-producti
 
 function isRetryableDbInitError(error) {
   const errorCode = String(error?.code || '');
-  return ['EAI_AGAIN', 'ENOTFOUND', 'ECONNREFUSED', 'ETIMEDOUT'].includes(errorCode);
+  return RETRYABLE_DB_ERROR_CODES.includes(errorCode);
 }
 
 function sleep(ms) {
