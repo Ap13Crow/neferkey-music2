@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { IconDisc, IconPlus, IconTrash, IconPlay, IconNote } from './Icons';
+import { IconDisc, IconPlus, IconTrash, IconPlay, IconNote, IconEdit } from './Icons';
 import TrackList from './TrackList';
 import ConfirmModal from './ConfirmModal';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 function CreateAlbumModal({ onClose, onCreated, token }) {
-  const [form, setForm] = useState({ name: '', description: '', cover_url: '' });
+  const [form, setForm] = useState({ name: '', description: '', cover_url: '', artist: '', composer: '', is_public: false });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -43,9 +43,21 @@ function CreateAlbumModal({ onClose, onCreated, token }) {
             <input className="form-input" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Optional" />
           </div>
           <div className="form-group">
+            <label className="form-label">Artist</label>
+            <input className="form-input" value={form.artist} onChange={(e) => setForm((f) => ({ ...f, artist: e.target.value }))} placeholder="Album artist" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Composer</label>
+            <input className="form-input" value={form.composer} onChange={(e) => setForm((f) => ({ ...f, composer: e.target.value }))} placeholder="Composer" />
+          </div>
+          <div className="form-group">
             <label className="form-label">Cover image URL</label>
             <input className="form-input" value={form.cover_url} onChange={(e) => setForm((f) => ({ ...f, cover_url: e.target.value }))} placeholder="https://..." />
           </div>
+          <label className="pref-item">
+            <span className="pref-label">Public album</span>
+            <input type="checkbox" checked={form.is_public} onChange={(e) => setForm((f) => ({ ...f, is_public: e.target.checked }))} />
+          </label>
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={loading}>{loading ? 'Creating…' : 'Create'}</button>
@@ -120,10 +132,81 @@ function AddTrackModal({ album, allTracks, onClose, onAdded, token }) {
   );
 }
 
-export default function AlbumsView({ albums, allTracks, token, onRefresh, onPlayTracks }) {
+function EditAlbumModal({ album, token, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    name: album.name || '',
+    description: album.description || '',
+    cover_url: album.cover_url || '',
+    artist: album.artist || '',
+    composer: album.composer || '',
+    is_public: !!album.is_public,
+  });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!form.name.trim()) { setError('Name is required'); return; }
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/albums/${album.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Failed'); return; }
+      onSaved(data);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-title">Edit album</div>
+        <form className="modal-form" onSubmit={handleSubmit}>
+          {error && <div className="auth-error">{error}</div>}
+          <div className="form-group">
+            <label className="form-label">Album name *</label>
+            <input className="form-input" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Artist</label>
+            <input className="form-input" value={form.artist} onChange={(e) => setForm((f) => ({ ...f, artist: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Composer</label>
+            <input className="form-input" value={form.composer} onChange={(e) => setForm((f) => ({ ...f, composer: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Description</label>
+            <input className="form-input" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Cover image URL</label>
+            <input className="form-input" value={form.cover_url} onChange={(e) => setForm((f) => ({ ...f, cover_url: e.target.value }))} />
+          </div>
+          <label className="pref-item">
+            <span className="pref-label">Public album</span>
+            <input type="checkbox" checked={form.is_public} onChange={(e) => setForm((f) => ({ ...f, is_public: e.target.checked }))} />
+          </label>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={loading}>{loading ? 'Saving…' : 'Save'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export default function AlbumsView({ albums, allTracks, token, onRefresh, onPlayTracks, canManageAll = false }) {
   const [selectedAlbum, setSelectedAlbum] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showAddTrack, setShowAddTrack] = useState(false);
+  const [showEditAlbum, setShowEditAlbum] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null); // { type: 'album'|'track', id, label }
 
   async function deleteAlbum(id) {
@@ -154,6 +237,7 @@ export default function AlbumsView({ albums, allTracks, token, onRefresh, onPlay
   const currentAlbum = selectedAlbum
     ? albums.find((a) => a.id === selectedAlbum.id) || selectedAlbum
     : null;
+  const canManageCurrentAlbum = !!token && !!currentAlbum && (canManageAll || currentAlbum.is_owned);
 
   return (
     <div>
@@ -166,10 +250,13 @@ export default function AlbumsView({ albums, allTracks, token, onRefresh, onPlay
               </button>
             </div>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              {token && (
+              {canManageCurrentAlbum && (
                 <>
                   <button className="btn btn-secondary btn-sm" onClick={() => setShowAddTrack(true)}>
                     <IconPlus size={13} /> Add track
+                  </button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setShowEditAlbum(true)}>
+                    <IconEdit size={13} /> Edit album
                   </button>
                   <button
                     className="btn btn-danger btn-sm"
@@ -211,8 +298,8 @@ export default function AlbumsView({ albums, allTracks, token, onRefresh, onPlay
             tracks={currentAlbum.tracks || []}
             currentIndex={-1}
             onPlay={(i) => onPlayTracks(currentAlbum.tracks, i)}
-            onDelete={token ? (key) => setConfirmDelete({ type: 'track', id: key, label: (currentAlbum.tracks || []).find((t) => t.url_key === key)?.title || key }) : null}
-            showDelete={!!token}
+            onDelete={canManageCurrentAlbum ? (key) => setConfirmDelete({ type: 'track', id: key, label: (currentAlbum.tracks || []).find((t) => t.url_key === key)?.title || key }) : null}
+            showDelete={canManageCurrentAlbum}
           />
 
           {showAddTrack && (
@@ -224,6 +311,14 @@ export default function AlbumsView({ albums, allTracks, token, onRefresh, onPlay
               onAdded={() => { onRefresh(); setShowAddTrack(false); }}
             />
           )}
+          {showEditAlbum && (
+            <EditAlbumModal
+              album={currentAlbum}
+              token={token}
+              onClose={() => setShowEditAlbum(false)}
+              onSaved={() => { onRefresh(); setShowEditAlbum(false); }}
+            />
+          )}
         </>
       ) : (
         <>
@@ -232,10 +327,10 @@ export default function AlbumsView({ albums, allTracks, token, onRefresh, onPlay
               <div className="section-title">Albums</div>
               <div className="section-subtitle">Your personal album collection</div>
             </div>
-            {token && (
-              <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-                <IconPlus size={14} /> New album
-              </button>
+             {token && (
+               <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+                 <IconPlus size={14} /> New album
+               </button>
             )}
           </div>
 
@@ -258,7 +353,7 @@ export default function AlbumsView({ albums, allTracks, token, onRefresh, onPlay
                     <div className="album-card-name">{album.name}</div>
                     <div className="album-card-meta">{(album.tracks || []).length} tracks</div>
                   </div>
-                  {token && (
+                  {token && (canManageAll || album.is_owned) && (
                     <div className="album-card-actions">
                       <button
                         className="icon-btn"

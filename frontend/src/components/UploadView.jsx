@@ -12,6 +12,7 @@ import {
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const AUDIO_EXTS = ['.mp3', '.flac', '.ogg', '.wav', '.aac', '.m4a', '.opus'];
 const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+const SCORE_EXTS = ['.pdf', '.xml', '.musicxml', '.mxl'];
 
 function extOf(name) {
   return name.slice(name.lastIndexOf('.')).toLowerCase();
@@ -42,7 +43,8 @@ function makeItem(file) {
     id: ++_nextId,
     file,
     imageFile: null,
-    form: { title, artist, genre: '', year: '', track_number, lyrics: '' },
+    scoreFile: null,
+    form: { title, artist, composer: '', genre: '', year: '', track_number, lyrics: '', is_public: false },
     status: null,
     message: '',
   };
@@ -73,13 +75,16 @@ export default function UploadView({ token, onUploaded, onClaim }) {
   function setImageFile(id, file) {
     setItems((prev) => prev.map((it) => it.id === id ? { ...it, imageFile: file } : it));
   }
+  function setScoreFile(id, file) {
+    setItems((prev) => prev.map((it) => it.id === id ? { ...it, scoreFile: file } : it));
+  }
 
   function setItemStatus(id, status, message) {
     setItems((prev) => prev.map((it) => it.id === id ? { ...it, status, message } : it));
   }
 
   async function uploadOne(item) {
-    const { form, file, imageFile } = item;
+    const { form, file, imageFile, scoreFile } = item;
     if (!form.title.trim() || !form.artist.trim()) {
       setItemStatus(item.id, 'error', 'Title and artist are required.');
       return false;
@@ -88,12 +93,15 @@ export default function UploadView({ token, onUploaded, onClaim }) {
     const data = new FormData();
     data.append('audio', file);
     if (imageFile) data.append('image', imageFile);
+    if (scoreFile) data.append('score', scoreFile);
     data.append('title', form.title.trim());
     data.append('artist', form.artist.trim());
     if (form.genre) data.append('genre', form.genre.trim());
     if (form.year) data.append('year', form.year);
     if (form.track_number) data.append('track_number', form.track_number);
     if (form.lyrics) data.append('lyrics', form.lyrics.trim());
+    if (form.composer) data.append('composer', form.composer.trim());
+    data.append('is_public', String(!!form.is_public));
     try {
       const res = await fetch(`${API_BASE}/tracks/upload`, {
         method: 'POST',
@@ -305,6 +313,7 @@ export default function UploadView({ token, onUploaded, onClaim }) {
               onRemove={() => removeItem(item.id)}
               onFormChange={(field, val) => updateForm(item.id, field, val)}
               onImageChange={(f) => setImageFile(item.id, f)}
+              onScoreChange={(f) => setScoreFile(item.id, f)}
               onUpload={() => uploadOne(item)}
             />
           ))}
@@ -398,9 +407,10 @@ function RedeemSection({ claimUrl, setClaimUrl, claimError, setClaimError, scann
   );
 }
 
-function UploadItem({ item, onRemove, onFormChange, onImageChange, onUpload }) {
+function UploadItem({ item, onRemove, onFormChange, onImageChange, onScoreChange, onUpload }) {
   const imageRef = useRef(null);
-  const { file, form, imageFile, status, message } = item;
+  const scoreRef = useRef(null);
+  const { file, form, imageFile, scoreFile, status, message } = item;
   const isDone = status === 'success';
   const isUploading = status === 'uploading';
 
@@ -445,6 +455,10 @@ function UploadItem({ item, onRemove, onFormChange, onImageChange, onUpload }) {
             <input className="form-input" value={form.genre} onChange={(e) => onFormChange('genre', e.target.value)} placeholder="e.g. Classical" />
           </div>
           <div className="form-group">
+            <label className="form-label">Composer</label>
+            <input className="form-input" value={form.composer} onChange={(e) => onFormChange('composer', e.target.value)} placeholder="e.g. W.A. Mozart" />
+          </div>
+          <div className="form-group">
             <label className="form-label">Year</label>
             <input className="form-input" type="number" value={form.year} onChange={(e) => onFormChange('year', e.target.value)} placeholder="e.g. 2024" min={1000} max={2100} />
           </div>
@@ -465,6 +479,23 @@ function UploadItem({ item, onRemove, onFormChange, onImageChange, onUpload }) {
               onChange={(e) => onImageChange(e.target.files[0] || null)}
             />
           </div>
+          <div className="form-group">
+            <label className="form-label">Score (PDF/XML)</label>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => scoreRef.current?.click()}>
+              {scoreFile ? `✓ ${scoreFile.name}` : 'Choose score…'}
+            </button>
+            <input
+              ref={scoreRef}
+              type="file"
+              accept={SCORE_EXTS.join(',')}
+              style={{ display: 'none' }}
+              onChange={(e) => onScoreChange(e.target.files[0] || null)}
+            />
+          </div>
+          <label className="pref-item">
+            <span className="pref-label">Public track</span>
+            <input type="checkbox" checked={!!form.is_public} onChange={(e) => onFormChange('is_public', e.target.checked)} />
+          </label>
         </div>
       )}
     </div>

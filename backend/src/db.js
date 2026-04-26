@@ -55,9 +55,13 @@ async function initDb() {
       album_key TEXT NOT NULL DEFAULT '',
       title TEXT NOT NULL,
       artist TEXT NOT NULL,
+      composer TEXT NOT NULL DEFAULT '',
       audio_url TEXT NOT NULL DEFAULT '',
       image_url TEXT NOT NULL DEFAULT '',
       lyrics TEXT NOT NULL DEFAULT '',
+      lyrics_asset_url TEXT NOT NULL DEFAULT '',
+      lyrics_asset_path TEXT NOT NULL DEFAULT '',
+      lyrics_asset_type TEXT NOT NULL DEFAULT '',
       genre TEXT NOT NULL DEFAULT '',
       year INTEGER,
       track_number INTEGER,
@@ -72,6 +76,10 @@ async function initDb() {
   // Add columns for upgrades from previous schema
   for (const stmt of [
     `ALTER TABLE records ADD COLUMN IF NOT EXISTS genre TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE records ADD COLUMN IF NOT EXISTS composer TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE records ADD COLUMN IF NOT EXISTS lyrics_asset_url TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE records ADD COLUMN IF NOT EXISTS lyrics_asset_path TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE records ADD COLUMN IF NOT EXISTS lyrics_asset_type TEXT NOT NULL DEFAULT ''`,
     `ALTER TABLE records ADD COLUMN IF NOT EXISTS year INTEGER`,
     `ALTER TABLE records ADD COLUMN IF NOT EXISTS track_number INTEGER`,
     `ALTER TABLE records ADD COLUMN IF NOT EXISTS file_path TEXT NOT NULL DEFAULT ''`,
@@ -93,12 +101,19 @@ async function initDb() {
       description TEXT NOT NULL DEFAULT '',
       cover_url TEXT NOT NULL DEFAULT '',
       cover_path TEXT NOT NULL DEFAULT '',
+      artist TEXT NOT NULL DEFAULT '',
+      composer TEXT NOT NULL DEFAULT '',
+      is_public BOOLEAN NOT NULL DEFAULT false,
       owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+  await pool.query(`ALTER TABLE albums ADD COLUMN IF NOT EXISTS artist TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE albums ADD COLUMN IF NOT EXISTS composer TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE albums ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT false`);
 
   await pool.query('CREATE INDEX IF NOT EXISTS idx_albums_owner ON albums (owner_id);');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_albums_is_public ON albums (is_public);');
 
   // Album-track ordered association
   await pool.query(`

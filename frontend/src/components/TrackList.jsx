@@ -1,6 +1,14 @@
-import { IconNote, IconPlay, IconTrash } from './Icons';
+import { IconEdit, IconNote, IconPlay, IconTrash } from './Icons';
 
-export default function TrackList({ tracks, currentIndex, onPlay, onDelete, showDelete }) {
+export default function TrackList({
+  tracks,
+  currentIndex,
+  onPlay,
+  onDelete,
+  showDelete,
+  onEdit,
+  showEdit,
+}) {
   if (tracks.length === 0) {
     return (
       <div className="empty-state">
@@ -46,6 +54,11 @@ export default function TrackList({ tracks, currentIndex, onPlay, onDelete, show
             {showDelete && onDelete && (
               <button className="btn btn-ghost btn-sm" title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(track.url_key); }}>
                 <IconTrash size={14} />
+              </button>
+            )}
+            {showEdit && onEdit && (
+              <button className="btn btn-ghost btn-sm" title="Edit metadata" onClick={(e) => { e.stopPropagation(); onEdit(track); }}>
+                <IconEdit size={14} />
               </button>
             )}
           </div>

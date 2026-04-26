@@ -72,6 +72,14 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
     if (playing) setCollapsed(false);
   }, [playing]);
 
+  useEffect(() => {
+    function onResize() {
+      if (window.innerWidth > 1024) setSettingsOpen(false);
+    }
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   function togglePlay() {
     const audio = audioRef.current;
     if (!audio) return;
@@ -164,14 +172,6 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
             <button className="ctrl-btn" title="Next" onClick={() => onIndexChange((currentIndex + 1) % queue.length)}>
               <IconSkipForward size={18} />
             </button>
-            <button
-              className="ctrl-btn player-settings-btn"
-              title="Playback settings"
-              aria-label="Playback settings"
-              onClick={() => setSettingsOpen((v) => !v)}
-            >
-              <IconKebabVertical size={16} />
-            </button>
           </div>
 
           <div className="progress-row">
@@ -212,6 +212,15 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
             <option value={2}>2×</option>
           </select>
         </div>
+
+        <button
+          className="ctrl-btn player-settings-btn"
+          title="Playback settings"
+          aria-label="Playback settings"
+          onClick={() => setSettingsOpen((v) => !v)}
+        >
+          <IconKebabVertical size={16} />
+        </button>
 
         {settingsOpen && (
           <div className="player-settings-popover">

@@ -1,9 +1,13 @@
 const express = require('express');
 
 const db = require('../db');
-const { requireAuth } = require('../auth');
+const { requireAuth, ROLES } = require('../auth');
 
 const router = express.Router();
+
+function canManageAlbum(ownerId, user) {
+  return ownerId === user.userId || user.role === ROLES.ADMIN || user.role === ROLES.MANAGER;
+}
 
 /**
  * @openapi
@@ -29,6 +33,24 @@ const router = express.Router();
  */
 router.get('/', requireAuth, async (req, res) => {
   try {
+    if ([ROLES.ADMIN, ROLES.MANAGER].includes(req.user.role)) {
+      const result = await db.query(
+        `SELECT a.*,
+           COALESCE(
+             json_agg(r.* ORDER BY at.position)
+             FILTER (WHERE r.url_key IS NOT NULL), '[]'
+           ) AS tracks,
+           true AS is_owned,
+           NULL::timestamptz AS purchased_at
+          FROM albums a
+          LEFT JOIN album_tracks at ON at.album_id = a.id
+          LEFT JOIN records r ON r.url_key = at.track_key
+          GROUP BY a.id
+          ORDER BY a.created_at DESC`,
+      );
+      return res.json({ albums: result.rows });
+    }
+
     const result = await db.query(
       `SELECT a.*,
          COALESCE(
@@ -52,6 +74,30 @@ router.get('/', requireAuth, async (req, res) => {
     return res.json({ albums: result.rows });
   } catch {
     return res.status(500).json({ error: 'Failed to fetch albums' });
+  }
+});
+
+// GET /api/albums/public — list public albums for unauthenticated users
+router.get('/public', async (_req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT a.*,
+         COALESCE(
+           json_agg(r.* ORDER BY at.position)
+           FILTER (WHERE r.url_key IS NOT NULL), '[]'
+         ) AS tracks,
+         false AS is_owned,
+         NULL::timestamptz AS purchased_at
+        FROM albums a
+        LEFT JOIN album_tracks at ON at.album_id = a.id
+        LEFT JOIN records r ON r.url_key = at.track_key AND r.is_public = true
+        WHERE a.is_public = true
+        GROUP BY a.id
+        ORDER BY a.created_at DESC`,
+    );
+    return res.json({ albums: result.rows });
+  } catch {
+    return res.status(500).json({ error: 'Failed to fetch public albums' });
   }
 });
 
@@ -93,14 +139,21 @@ router.get('/:albumKey', async (req, res) => {
 
 // POST /api/albums — create album (auth required)
 router.post('/', requireAuth, async (req, res) => {
-  const { name, description = '', cover_url = '' } = req.body;
+  const {
+    name,
+    description = '',
+    cover_url = '',
+    artist = '',
+    composer = '',
+    is_public = false,
+  } = req.body;
   if (!name) {
     return res.status(400).json({ error: 'name is required' });
   }
   try {
     const result = await db.query(
-      'INSERT INTO albums (name, description, cover_url, owner_id) VALUES ($1, $2, $3, $4) RETURNING *',
-      [name.trim(), description.trim(), cover_url.trim(), req.user.userId],
+      'INSERT INTO albums (name, description, cover_url, artist, composer, is_public, owner_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [name.trim(), description.trim(), cover_url.trim(), artist.trim(), composer.trim(), is_public === true || is_public === 'true', req.user.userId],
     );
     return res.status(201).json({ ...result.rows[0], tracks: [] });
   } catch {
@@ -111,22 +164,32 @@ router.post('/', requireAuth, async (req, res) => {
 // PUT /api/albums/:id — update album metadata (auth required, owner only)
 router.put('/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
-  const { name, description, cover_url } = req.body;
+  const {
+    name,
+    description,
+    cover_url,
+    artist,
+    composer,
+    is_public,
+  } = req.body;
   try {
     const existing = await db.query('SELECT * FROM albums WHERE id = $1 LIMIT 1', [id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Album not found' });
     }
-    if (existing.rows[0].owner_id !== req.user.userId) {
+    if (!canManageAlbum(existing.rows[0].owner_id, req.user)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     const album = existing.rows[0];
     const result = await db.query(
-      'UPDATE albums SET name=$1, description=$2, cover_url=$3 WHERE id=$4 RETURNING *',
+      'UPDATE albums SET name=$1, description=$2, cover_url=$3, artist=$4, composer=$5, is_public=$6 WHERE id=$7 RETURNING *',
       [
         name !== undefined ? name.trim() : album.name,
         description !== undefined ? description.trim() : album.description,
         cover_url !== undefined ? cover_url.trim() : album.cover_url,
+        artist !== undefined ? artist.trim() : (album.artist || ''),
+        composer !== undefined ? composer.trim() : (album.composer || ''),
+        is_public !== undefined ? (is_public === true || is_public === 'true') : album.is_public,
         id,
       ],
     );
@@ -144,7 +207,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Album not found' });
     }
-    if (existing.rows[0].owner_id !== req.user.userId) {
+    if (!canManageAlbum(existing.rows[0].owner_id, req.user)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     await db.query('DELETE FROM albums WHERE id = $1', [id]);
@@ -166,7 +229,7 @@ router.post('/:id/tracks', requireAuth, async (req, res) => {
     if (albumCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Album not found' });
     }
-    if (albumCheck.rows[0].owner_id !== req.user.userId) {
+    if (!canManageAlbum(albumCheck.rows[0].owner_id, req.user)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     const trackCheck = await db.query('SELECT url_key FROM records WHERE url_key = $1 LIMIT 1', [track_key]);
@@ -196,7 +259,7 @@ router.delete('/:id/tracks/:trackKey', requireAuth, async (req, res) => {
     if (albumCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Album not found' });
     }
-    if (albumCheck.rows[0].owner_id !== req.user.userId) {
+    if (!canManageAlbum(albumCheck.rows[0].owner_id, req.user)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     await db.query('DELETE FROM album_tracks WHERE album_id = $1 AND track_key = $2', [id, trackKey]);
