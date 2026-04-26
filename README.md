@@ -22,6 +22,7 @@ cp .env.example .env
 
 2. Set strong values in `.env` (recommended, at minimum `POSTGRES_PASSWORD` and `JWT_SECRET`).
    - If `.env` is missing, Docker Compose uses development defaults for `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, and `JWT_SECRET`.
+   - These defaults are for local/Codespaces development only and must not be used for shared or production environments.
 
 3. Run:
 

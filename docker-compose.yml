@@ -3,7 +3,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-music}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-music}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev-only-postgres-password-change-me}
       POSTGRES_DB: ${POSTGRES_DB:-music}
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -18,8 +18,8 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3000
-      DATABASE_URL: postgres://${POSTGRES_USER:-music}:${POSTGRES_PASSWORD:-music}@db:5432/${POSTGRES_DB:-music}
-      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-me}
+      DATABASE_URL: postgres://${POSTGRES_USER:-music}:${POSTGRES_PASSWORD:-dev-only-postgres-password-change-me}@db:5432/${POSTGRES_DB:-music}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-jwt-secret-change-me}
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads:/app/uploads
