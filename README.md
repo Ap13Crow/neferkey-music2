@@ -14,13 +14,15 @@ Docker-based cloud-native music player with a React frontend and PostgreSQL-back
 
 ## Local development (Docker Compose)
 
-1. Create local env file:
+1. (Optional) Create local env file to override defaults:
 
 ```bash
 cp .env.example .env
 ```
 
-2. Set strong values in `.env` (at minimum `POSTGRES_PASSWORD` and `JWT_SECRET`).
+2. Set strong values in `.env` (recommended, at minimum `POSTGRES_PASSWORD` and `JWT_SECRET`).
+   - If `.env` is missing, Docker Compose uses development defaults for `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, and `JWT_SECRET`.
+   - These defaults are for local/Codespaces development only and must not be used for shared or production environments.
 
 3. Run:
 
