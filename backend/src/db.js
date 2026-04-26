@@ -11,6 +11,9 @@ if (!connectionString) {
 const pool = new Pool({ connectionString });
 
 async function initDb() {
+  // Required for gen_random_uuid() defaults used in table schemas.
+  await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto;');
+
   // Users table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
