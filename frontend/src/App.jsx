@@ -484,7 +484,7 @@ function SearchModal({
           <input className="form-input" placeholder="Composer" value={params.composer} onChange={(e) => next({ composer: e.target.value })} />
           <input className="form-input" type="date" value={params.date_from} onChange={(e) => next({ date_from: e.target.value })} />
           <input className="form-input" type="date" value={params.date_to} onChange={(e) => next({ date_to: e.target.value })} />
-          <button className="btn btn-primary" onClick={() => onSearch(params)} disabled={loading}>Search</button>
+          <button className="btn btn-primary search-submit-btn" onClick={() => onSearch(params)} disabled={loading}>Search</button>
         </div>
         {error && <div className="auth-error">{error}</div>}
         <div className="search-results">
@@ -552,7 +552,7 @@ function TrackEditModal({ track, token, onClose, onSaved }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal track-edit-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-title">Edit track metadata</div>
         {error && <div className="auth-error">{error}</div>}
         <div className="upload-item-form">

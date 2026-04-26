@@ -709,10 +709,11 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
 }
 .upload-item-form {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
   padding: 0 1rem 1rem;
 }
+.upload-item-form > * { min-width: 0; }
 
 .upload-form {
   display: grid;
@@ -738,6 +739,15 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
 }
 .form-input:focus { outline: none; border-color: var(--accent); }
 .form-input::placeholder { color: var(--text-muted); }
+.pref-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.pref-item .pref-label {
+  min-width: 0;
+}
 .form-textarea {
   resize: vertical;
   min-height: 80px;
@@ -872,9 +882,18 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
 }
 .search-filters {
   display: grid;
-  grid-template-columns: minmax(160px, 2fr) repeat(5, minmax(110px, 1fr)) auto;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 0.5rem;
   margin-bottom: 0.9rem;
+}
+.search-filters > * { min-width: 0; }
+.search-submit-btn { justify-self: end; }
+.track-edit-modal {
+  width: min(920px, calc(100vw - 1.25rem));
+}
+.track-edit-modal .upload-item-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 0;
 }
 .search-results {
   border-top: 1px solid var(--border);
@@ -992,7 +1011,8 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
   .player-settings-btn { display: inline-flex; }
   .player-settings-popover { display: flex; flex-direction: column; }
   .player-settings-popover .volume-slider { width: 100px; }
-  .search-filters { grid-template-columns: 1fr 1fr; }
+  .search-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .track-edit-modal .upload-item-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 640px) {
@@ -1059,6 +1079,8 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
   .player-settings-popover { right: 0.5rem; min-width: 155px; }
   .player-settings-popover .speed-select { font-size: 0.68rem; padding: 0.15rem 0.3rem; }
   .search-filters { grid-template-columns: 1fr; }
+  .search-submit-btn { width: 100%; justify-content: center; }
+  .track-edit-modal .upload-item-form { grid-template-columns: 1fr; }
 
   /* Album detail */
   .album-detail-hero { flex-direction: column; align-items: flex-start; }
