@@ -18,7 +18,8 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'change-me-in-producti
 }
 
 function isRetryableDbInitError(error) {
-  return ['EAI_AGAIN', 'ENOTFOUND', 'ECONNREFUSED', 'ETIMEDOUT'].includes(error?.code);
+  const errorCode = typeof error?.code === 'string' ? error.code : String(error?.code || '');
+  return ['EAI_AGAIN', 'ENOTFOUND', 'ECONNREFUSED', 'ETIMEDOUT'].includes(errorCode);
 }
 
 function sleep(ms) {
@@ -43,7 +44,7 @@ async function startServer() {
       }
       // eslint-disable-next-line no-console
       console.warn(
-        `Database init failed (${error.code}) on attempt ${attempt}/${dbInitRetryAttempts}; retrying in ${dbInitRetryDelayMs}ms`,
+        `Database init failed (${error?.code || 'unknown'}) on attempt ${attempt}/${dbInitRetryAttempts}; retrying in ${dbInitRetryDelayMs}ms`,
       );
       await sleep(dbInitRetryDelayMs);
     }
