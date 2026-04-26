@@ -1,4 +1,5 @@
 import AccountMenu from './AccountMenu';
+import { IconSearch } from './Icons';
 
 export function IconMenu({ size = 20 }) {
   return (
@@ -21,6 +22,7 @@ export default function TopBar({
   onPreferences,
   onDeleteAccount,
   onSignOut,
+  onOpenSearch,
 }) {
   return (
     <div className="top-bar">
@@ -33,6 +35,14 @@ export default function TopBar({
         <IconMenu size={20} />
       </button>
       <span className="top-bar-title">{viewTitle}</span>
+      <button
+        className="top-search-btn"
+        onClick={onOpenSearch}
+        title="Search"
+        aria-label="Search"
+      >
+        <IconSearch size={16} />
+      </button>
       <AccountMenu
         user={user}
         onSignIn={onSignIn}

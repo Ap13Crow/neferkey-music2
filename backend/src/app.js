@@ -9,6 +9,7 @@ const authRouter = require('./routes/auth');
 const tracksRouter = require('./routes/tracks');
 const albumsRouter = require('./routes/albums');
 const purchaseLinksRouter = require('./routes/purchase-links');
+const searchRouter = require('./routes/search');
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '../uploads');
 const corsOrigins = (process.env.CORS_ORIGIN || '')
@@ -84,9 +85,12 @@ const swaggerSpec = swaggerJsdoc({
             album_key: { type: 'string' },
             title: { type: 'string' },
             artist: { type: 'string' },
+            composer: { type: 'string' },
             audio_url: { type: 'string' },
             image_url: { type: 'string' },
             lyrics: { type: 'string' },
+            lyrics_asset_url: { type: 'string' },
+            lyrics_asset_type: { type: 'string' },
             genre: { type: 'string' },
             year: { type: 'integer', nullable: true },
             track_number: { type: 'integer', nullable: true },
@@ -102,6 +106,9 @@ const swaggerSpec = swaggerJsdoc({
             name: { type: 'string' },
             description: { type: 'string' },
             cover_url: { type: 'string' },
+            artist: { type: 'string' },
+            composer: { type: 'string' },
+            is_public: { type: 'boolean', description: 'Whether album is publicly visible' },
             owner_id: { type: 'string', format: 'uuid' },
             created_at: { type: 'string', format: 'date-time' },
             tracks: { type: 'array', items: { $ref: '#/components/schemas/Track' } },
@@ -158,9 +165,11 @@ app.use('/api/api/auth', authLimiter, authRouter);
 app.use('/api/tracks', apiLimiter, tracksRouter);
 app.use('/api/albums', apiLimiter, albumsRouter);
 app.use('/api/purchase-links', apiLimiter, purchaseLinksRouter);
+app.use('/api/search', apiLimiter, searchRouter);
 app.use('/api/api/tracks', apiLimiter, tracksRouter);
 app.use('/api/api/albums', apiLimiter, albumsRouter);
 app.use('/api/api/purchase-links', apiLimiter, purchaseLinksRouter);
+app.use('/api/api/search', apiLimiter, searchRouter);
 
 /**
  * @openapi

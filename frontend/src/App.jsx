@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import AuthScreen from './components/AuthScreen';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
@@ -12,6 +12,7 @@ import ClaimModal from './components/ClaimModal';
 import AdminLinksView from './components/AdminLinksView';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+const SCORE_EXTS = '.pdf,.xml,.musicxml,.mxl';
 
 const DEMO_TRACKS = [
   {
@@ -75,6 +76,22 @@ export default function App() {
 
   const [confirmDeleteTrack, setConfirmDeleteTrack] = useState(null);
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
+  const [editingTrack, setEditingTrack] = useState(null);
+
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchParams, setSearchParams] = useState({
+    q: '',
+    type: 'all',
+    artist: '',
+    composer: '',
+    date_from: '',
+    date_to: '',
+  });
+  const [searchResults, setSearchResults] = useState({ tracks: [], albums: [] });
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [lyricsXmlText, setLyricsXmlText] = useState('');
+  const [lyricsXmlError, setLyricsXmlError] = useState('');
 
   // Purchase link claim flow
   const [claimToken, setClaimToken] = useState(null);
@@ -113,9 +130,10 @@ export default function App() {
   }, [token]);
 
   const loadAlbums = useCallback(async () => {
-    if (!token) { setAlbums([]); return; }
     try {
-      const res = await fetch(`${API_BASE}/albums`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = token
+        ? await fetch(`${API_BASE}/albums`, { headers: { Authorization: `Bearer ${token}` } })
+        : await fetch(`${API_BASE}/albums/public`);
       if (res.ok) {
         const data = await res.json();
         setAlbums(data.albums || []);
@@ -125,6 +143,29 @@ export default function App() {
 
   useEffect(() => { loadTracks(); }, [loadTracks]);
   useEffect(() => { loadAlbums(); }, [loadAlbums]);
+
+  const runSearch = useCallback(async (params = searchParams) => {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (String(v || '').trim()) query.set(k, String(v).trim());
+    });
+    setSearchLoading(true);
+    setSearchError('');
+    try {
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch(`${API_BASE}/search?${query.toString()}`, { headers });
+      const data = await res.json();
+      if (!res.ok) {
+        setSearchError(data.error || 'Search failed');
+        return;
+      }
+      setSearchResults({ tracks: data.tracks || [], albums: data.albums || [] });
+    } catch {
+      setSearchError('Search failed');
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [searchParams, token]);
 
   function handleAuth(newUser, newToken) {
     setUser(newUser);
@@ -198,6 +239,24 @@ export default function App() {
   }
 
   const currentTrack = queue[queueIndex] || null;
+  const canManageAllMetadata = user?.role === 'admin' || user?.role === 'manager';
+  const canEditTrack = (track) => !!token && (canManageAllMetadata || track?.owner_id === user?.id);
+
+  useEffect(() => {
+    const track = currentTrack;
+    setLyricsXmlText('');
+    setLyricsXmlError('');
+    if (!track?.lyrics_asset_url) return;
+    const ext = String(track.lyrics_asset_type || '').toLowerCase();
+    if (!ext.includes('xml')) return;
+
+    let cancelled = false;
+    fetch(track.lyrics_asset_url)
+      .then((r) => r.ok ? r.text() : Promise.reject(new Error('Failed to load XML score')))
+      .then((text) => { if (!cancelled) setLyricsXmlText(text); })
+      .catch(() => { if (!cancelled) setLyricsXmlError('Unable to load XML score.'); });
+    return () => { cancelled = true; };
+  }, [currentTrack]);
 
   function renderContent() {
     switch (view) {
@@ -216,6 +275,8 @@ export default function App() {
               onPlay={(i) => handlePlayTracks(tracks, i)}
               onDelete={token ? handleDeleteTrack : null}
               showDelete={!!token}
+              onEdit={canManageAllMetadata ? setEditingTrack : null}
+              showEdit={canManageAllMetadata}
             />
           </div>
         );
@@ -228,6 +289,7 @@ export default function App() {
             onRefresh={() => { loadAlbums(); loadTracks(); }}
             onPlayTracks={handlePlayTracks}
             currentIndex={queueIndex}
+            canManageAll={canManageAllMetadata}
           />
         );
       case 'lyrics':
@@ -242,9 +304,26 @@ export default function App() {
               )}
             </div>
             <div className="lyrics-panel">
-              {currentTrack?.lyrics
-                ? <span>{currentTrack.lyrics}</span>
-                : <span className="lyrics-empty">No lyrics available for this track.</span>}
+              {currentTrack?.lyrics_asset_url && currentTrack?.lyrics_asset_type === '.pdf' && (
+                <iframe
+                  title="Music score PDF"
+                  src={currentTrack.lyrics_asset_url}
+                  className="lyrics-score-frame"
+                />
+              )}
+              {currentTrack?.lyrics_asset_url && currentTrack?.lyrics_asset_type?.includes('xml') && (
+                <>
+                  <a className="btn btn-secondary btn-sm" href={currentTrack.lyrics_asset_url} target="_blank" rel="noreferrer">
+                    Open XML score
+                  </a>
+                  {lyricsXmlError && <div className="lyrics-empty">{lyricsXmlError}</div>}
+                  {lyricsXmlText && <pre className="lyrics-xml">{lyricsXmlText}</pre>}
+                </>
+              )}
+              {currentTrack?.lyrics && <span>{currentTrack.lyrics}</span>}
+              {!currentTrack?.lyrics && !currentTrack?.lyrics_asset_url && (
+                <span className="lyrics-empty">No lyrics or score available for this track.</span>
+              )}
             </div>
           </div>
         );
@@ -301,6 +380,10 @@ export default function App() {
         onPreferences={() => navigateTo('profile')}
         onDeleteAccount={() => setConfirmDeleteAccount(true)}
         onSignOut={logout}
+        onOpenSearch={() => {
+          setSearchOpen(true);
+          runSearch(searchParams);
+        }}
       />
 
       <main className="main-content">{renderContent()}</main>
@@ -311,6 +394,33 @@ export default function App() {
         onIndexChange={setQueueIndex}
         playIntent={playIntent}
       />
+
+      {searchOpen && (
+        <SearchModal
+          params={searchParams}
+          results={searchResults}
+          loading={searchLoading}
+          error={searchError}
+          onClose={() => setSearchOpen(false)}
+          onChange={(next) => setSearchParams(next)}
+          onSearch={(next) => runSearch(next)}
+          onPlayTrack={(track) => {
+            const i = tracks.findIndex((t) => t.url_key === track.url_key);
+            if (i >= 0) handlePlayTracks(tracks, i);
+            setSearchOpen(false);
+          }}
+          onOpenAlbums={() => { setView('albums'); setSearchOpen(false); }}
+        />
+      )}
+
+      {editingTrack && canEditTrack(editingTrack) && (
+        <TrackEditModal
+          track={editingTrack}
+          token={token}
+          onClose={() => setEditingTrack(null)}
+          onSaved={() => { setEditingTrack(null); loadTracks(); loadAlbums(); }}
+        />
+      )}
 
       {claimToken && (
         <ClaimModal
@@ -343,6 +453,164 @@ export default function App() {
           onCancel={() => setConfirmDeleteAccount(false)}
         />
       )}
+    </div>
+  );
+}
+
+function SearchModal({
+  params,
+  results,
+  loading,
+  error,
+  onClose,
+  onChange,
+  onSearch,
+  onPlayTrack,
+  onOpenAlbums,
+}) {
+  const next = (patch) => onChange({ ...params, ...patch });
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal search-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-title">Search</div>
+        <div className="search-filters">
+          <input className="form-input" placeholder="Title, album, artist…" value={params.q} onChange={(e) => next({ q: e.target.value })} />
+          <select className="form-input" value={params.type} onChange={(e) => next({ type: e.target.value })}>
+            <option value="all">Tracks + Albums</option>
+            <option value="tracks">Tracks</option>
+            <option value="albums">Albums</option>
+          </select>
+          <input className="form-input" placeholder="Artist" value={params.artist} onChange={(e) => next({ artist: e.target.value })} />
+          <input className="form-input" placeholder="Composer" value={params.composer} onChange={(e) => next({ composer: e.target.value })} />
+          <input className="form-input" type="date" value={params.date_from} onChange={(e) => next({ date_from: e.target.value })} />
+          <input className="form-input" type="date" value={params.date_to} onChange={(e) => next({ date_to: e.target.value })} />
+          <button className="btn btn-primary" onClick={() => onSearch(params)} disabled={loading}>Search</button>
+        </div>
+        {error && <div className="auth-error">{error}</div>}
+        <div className="search-results">
+          <div className="search-group-title">Tracks ({results.tracks.length})</div>
+          {results.tracks.map((t) => (
+            <button key={t.url_key} className="search-result-row" onClick={() => onPlayTrack(t)}>
+              <span>{t.title}</span>
+              <small>{t.artist}{t.composer ? ` · ${t.composer}` : ''}</small>
+            </button>
+          ))}
+          <div className="search-group-title">Albums ({results.albums.length})</div>
+          {results.albums.map((a) => (
+            <button key={a.id} className="search-result-row" onClick={onOpenAlbums}>
+              <span>{a.name}</span>
+              <small>{a.artist || '—'}{a.composer ? ` · ${a.composer}` : ''}</small>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TrackEditModal({ track, token, onClose, onSaved }) {
+  const scoreRef = useRef(null);
+  const [form, setForm] = useState({
+    title: track.title || '',
+    artist: track.artist || '',
+    composer: track.composer || '',
+    genre: track.genre || '',
+    year: track.year || '',
+    track_number: track.track_number || '',
+    lyrics: track.lyrics || '',
+    is_public: !!track.is_public,
+    clear_score: false,
+  });
+  const [scoreFile, setScoreFile] = useState(null);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    setError('');
+    try {
+      const data = new FormData();
+      Object.entries(form).forEach(([k, v]) => data.append(k, String(v)));
+      if (scoreFile) data.append('score', scoreFile);
+      const res = await fetch(`${API_BASE}/tracks/${encodeURIComponent(track.url_key)}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+        body: data,
+      });
+      const payload = await res.json();
+      if (!res.ok) {
+        setError(payload.error || 'Failed to save');
+        return;
+      }
+      onSaved(payload);
+    } catch {
+      setError('Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-title">Edit track metadata</div>
+        {error && <div className="auth-error">{error}</div>}
+        <div className="upload-item-form">
+          <div className="form-group">
+            <label className="form-label">Title</label>
+            <input className="form-input" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Artist</label>
+            <input className="form-input" value={form.artist} onChange={(e) => setForm((f) => ({ ...f, artist: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Composer</label>
+            <input className="form-input" value={form.composer} onChange={(e) => setForm((f) => ({ ...f, composer: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Genre</label>
+            <input className="form-input" value={form.genre} onChange={(e) => setForm((f) => ({ ...f, genre: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Year</label>
+            <input className="form-input" value={form.year} onChange={(e) => setForm((f) => ({ ...f, year: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Track #</label>
+            <input className="form-input" value={form.track_number} onChange={(e) => setForm((f) => ({ ...f, track_number: e.target.value }))} />
+          </div>
+          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+            <label className="form-label">Lyrics</label>
+            <textarea className="form-input" value={form.lyrics} onChange={(e) => setForm((f) => ({ ...f, lyrics: e.target.value }))} rows={4} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Replace score (PDF/XML)</label>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => scoreRef.current?.click()}>
+              {scoreFile ? `✓ ${scoreFile.name}` : 'Choose score…'}
+            </button>
+            <input
+              ref={scoreRef}
+              type="file"
+              accept={SCORE_EXTS}
+              style={{ display: 'none' }}
+              onChange={(e) => setScoreFile(e.target.files[0] || null)}
+            />
+          </div>
+          <label className="pref-item">
+            <span className="pref-label">Public track</span>
+            <input type="checkbox" checked={form.is_public} onChange={(e) => setForm((f) => ({ ...f, is_public: e.target.checked }))} />
+          </label>
+          <label className="pref-item">
+            <span className="pref-label">Remove current score</span>
+            <input type="checkbox" checked={form.clear_score} onChange={(e) => setForm((f) => ({ ...f, clear_score: e.target.checked }))} />
+          </label>
+        </div>
+        <div className="modal-actions">
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+        </div>
+      </div>
     </div>
   );
 }
