@@ -119,7 +119,9 @@ router.get('/', async (req, res) => {
     }
 
     return res.json({ tracks, albums });
-  } catch {
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Search failed', err);
     return res.status(500).json({ error: 'Search failed' });
   }
 });
