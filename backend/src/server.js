@@ -3,6 +3,8 @@ const { initDb } = require('./db');
 
 const port = Number(process.env.PORT || 3000);
 const isProduction = process.env.NODE_ENV === 'production';
+const dbInitRetryAttempts = Number(process.env.DB_INIT_RETRY_ATTEMPTS || 10);
+const dbInitRetryDelayMs = Number(process.env.DB_INIT_RETRY_DELAY_MS || 2000);
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'change-me-in-production') {
   if (isProduction) {
@@ -15,15 +17,41 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'change-me-in-producti
   );
 }
 
-initDb()
-  .then(() => {
-    app.listen(port, () => {
+function isRetryableDbInitError(error) {
+  return ['EAI_AGAIN', 'ENOTFOUND', 'ECONNREFUSED', 'ETIMEDOUT'].includes(error?.code);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function startServer() {
+  let lastError;
+  for (let attempt = 1; attempt <= dbInitRetryAttempts; attempt += 1) {
+    try {
+      await initDb();
+      app.listen(port, () => {
+        // eslint-disable-next-line no-console
+        console.log(`API listening on port ${port}`);
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+      const retryable = isRetryableDbInitError(error);
+      if (!retryable || attempt === dbInitRetryAttempts) {
+        break;
+      }
       // eslint-disable-next-line no-console
-      console.log(`API listening on port ${port}`);
-    });
-  })
-  .catch((error) => {
-    // eslint-disable-next-line no-console
-    console.error('Failed to start API', error);
-    process.exit(1);
-  });
+      console.warn(
+        `Database init failed (${error.code}) on attempt ${attempt}/${dbInitRetryAttempts}; retrying in ${dbInitRetryDelayMs}ms`,
+      );
+      await sleep(dbInitRetryDelayMs);
+    }
+  }
+
+  // eslint-disable-next-line no-console
+  console.error('Failed to start API', lastError);
+  process.exit(1);
+}
+
+startServer();
