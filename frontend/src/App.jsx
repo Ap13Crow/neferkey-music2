@@ -18,6 +18,8 @@ import {
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const SCORE_EXTS = '.pdf,.xml,.musicxml,.mxl';
+const LONG_PRESS_TIMEOUT_MS = 520;
+const DOUBLE_TAP_THRESHOLD_MS = 280;
 
 const DEMO_TRACKS = [
   {
@@ -387,14 +389,14 @@ export default function App() {
       longPressTriggeredRef.current = true;
       setAudiobookAccountMenuOpen(true);
       setAudiobookContextOpen(false);
-    }, 520);
+    }, LONG_PRESS_TIMEOUT_MS);
   }
 
   function handleAudiobookAccountPointerUp() {
     clearTimeout(longPressRef.current);
     if (longPressTriggeredRef.current) return;
     const now = Date.now();
-    if (now - lastAccountTapRef.current < 280) {
+    if (now - lastAccountTapRef.current < DOUBLE_TAP_THRESHOLD_MS) {
       setAudiobookAccountMenuOpen((open) => !open);
       setAudiobookContextOpen(false);
       lastAccountTapRef.current = 0;
