@@ -185,8 +185,9 @@ export default function AdminLinksView({ token, tracks, albums }) {
   const nfcResourceOptions = nfcForm.resource_type === 'track' ? tracks : albums;
 
   async function verifyWrittenNfc(expectedUrl) {
+    let reader = null;
     try {
-      const reader = new NDEFReader();
+      reader = new NDEFReader();
       await reader.scan();
       return await new Promise((resolve) => {
         const timeout = setTimeout(() => resolve(false), 2500);
@@ -202,6 +203,11 @@ export default function AdminLinksView({ token, tracks, albums }) {
       });
     } catch {
       return false;
+    } finally {
+      if (reader) {
+        reader.onreading = null;
+        reader.onreadingerror = null;
+      }
     }
   }
 
