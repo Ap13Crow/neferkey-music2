@@ -29,6 +29,24 @@ function buildClaimUrl(token) {
   return `${window.location.origin}${window.location.pathname}?claim=${token}`;
 }
 
+function getNfcWriteErrorMessage(err, support) {
+  const name = String(err?.name || '');
+  const message = String(err?.message || '');
+  if (name === 'NotAllowedError' || /permission request denied/i.test(message)) {
+    if (support?.ios && support?.safari) {
+      return 'NFC writing is not supported on iPhone/iPad Safari. Use Android Chrome for NFC writing.';
+    }
+    return 'NFC permission denied. On Android Chrome, allow NFC for this site and keep the phone unlocked.';
+  }
+  if (name === 'SecurityError') {
+    return 'NFC requires HTTPS (secure context).';
+  }
+  if (name === 'NotSupportedError' || /not supported|not available/i.test(message)) {
+    return support?.message || 'NFC is not available in this browser/device.';
+  }
+  return message || 'NFC write failed.';
+}
+
 export default function AdminLinksView({ token, tracks, albums }) {
   const [links, setLinks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -266,7 +284,7 @@ export default function AdminLinksView({ token, tracks, albums }) {
         setNfcWriteState((prev) => ({
           ...prev,
           step: 'error',
-          error: err?.message || 'NFC write failed.',
+          error: getNfcWriteErrorMessage(err, nfcSupport),
           status: `Failed while writing tag ${i + 1}.`,
         }));
         return;

@@ -26,6 +26,22 @@ test('isNfcSupported validates secure context and reader capability', () => {
   assert.match(unsupported.message, /HTTPS/);
 });
 
+test('isNfcSupported returns iOS Safari-specific unsupported message', () => {
+  const unsupported = isNfcSupported({
+    isSecureContext: true,
+    NDEFReader: undefined,
+    matchMedia: () => ({ matches: true }),
+    navigator: {
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+      platform: 'iPhone',
+      maxTouchPoints: 5,
+    },
+  });
+  assert.equal(unsupported.supported, false);
+  assert.equal(unsupported.ios, true);
+  assert.match(unsupported.message, /iPhone\/iPad Safari/);
+});
+
 test('buildNfcResourceUrl and parseNfcResourceUrl round-trip values', () => {
   const url = buildNfcResourceUrl(
     'track',
