@@ -32,10 +32,11 @@ function buildClaimUrl(token) {
 function getNfcWriteErrorMessage(err, support) {
   const name = String(err?.name || '');
   const message = String(err?.message || '');
-  if (name === 'NotAllowedError' || /permission request denied/i.test(message)) {
-    if (support?.ios && support?.safari) {
-      return 'NFC writing is not supported on iPhone/iPad Safari. Use Android Chrome for NFC writing.';
-    }
+  const iosSafari = !!(support?.ios && support?.safari);
+  const iosSafariMsg = 'NFC writing is not supported on iPhone/iPad Safari. Use Android Chrome for NFC writing.';
+  const permissionDenied = name === 'NotAllowedError' || /permission request denied/i.test(message);
+  if (permissionDenied) {
+    if (iosSafari) return iosSafariMsg;
     return 'NFC permission denied. On Android Chrome, allow NFC for this site and keep the phone unlocked.';
   }
   if (name === 'SecurityError') {

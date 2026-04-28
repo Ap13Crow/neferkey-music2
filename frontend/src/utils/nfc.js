@@ -3,13 +3,20 @@ const IOS_PLATFORM_RE = /iPad|iPhone|iPod/i;
 const ANDROID_PLATFORM_RE = /Android/i;
 const MOBILE_SAFARI_RE = /Safari/i;
 const CHROMIUM_RE = /Chrome|CriOS|Edg|EdgiOS|OPR|SamsungBrowser/i;
+const DESKTOP_IPAD_PLATFORM = 'MacIntel';
+const APPLE_VENDOR_TOKEN = 'Apple';
 
 function getPlatformHints(win) {
   const ua = String(win?.navigator?.userAgent || '');
   const platform = String(win?.navigator?.platform || '');
+  const vendor = String(win?.navigator?.vendor || '');
   const maxTouchPoints = Number(win?.navigator?.maxTouchPoints || 0);
-  const ios = IOS_PLATFORM_RE.test(ua)
-    || (platform === 'MacIntel' && maxTouchPoints > 1);
+  const likelyIpadDesktopMode = platform === DESKTOP_IPAD_PLATFORM
+    && maxTouchPoints >= 2
+    && vendor.includes(APPLE_VENDOR_TOKEN)
+    && MOBILE_SAFARI_RE.test(ua)
+    && !CHROMIUM_RE.test(ua);
+  const ios = IOS_PLATFORM_RE.test(ua) || likelyIpadDesktopMode;
   const android = ANDROID_PLATFORM_RE.test(ua);
   const safari = MOBILE_SAFARI_RE.test(ua) && !CHROMIUM_RE.test(ua);
   return { ios, android, safari };
