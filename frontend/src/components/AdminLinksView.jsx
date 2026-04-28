@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { IconKey, IconCopy, IconTrash, IconCheck, IconPlus } from './Icons';
+import {
+  IconKey, IconCopy, IconTrash, IconCheck, IconPlus, IconNfc,
+} from './Icons';
+import {
+  buildNfcResourceUrl,
+  decodeNfcRecordData,
+  isNfcSupported,
+} from '../utils/nfc';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
@@ -42,6 +49,21 @@ export default function AdminLinksView({ token, tracks, albums }) {
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersError, setUsersError] = useState('');
   const [savingRoleId, setSavingRoleId] = useState(null);
+  const [nfcForm, setNfcForm] = useState({
+    resource_type: 'track',
+    resource_key: '',
+    repeat_count: 1,
+  });
+  const [nfcWriteState, setNfcWriteState] = useState({
+    step: 'idle',
+    status: '',
+    written: 0,
+    verified: false,
+    error: '',
+    recentUrl: '',
+    records: [],
+  });
+  const nfcSupport = isNfcSupported();
 
   const loadLinks = useCallback(async () => {
     setLoading(true);
@@ -160,6 +182,103 @@ export default function AdminLinksView({ token, tracks, albums }) {
   }
 
   const resourceOptions = form.resource_type === 'track' ? tracks : albums;
+  const nfcResourceOptions = nfcForm.resource_type === 'track' ? tracks : albums;
+
+  async function verifyWrittenNfc(expectedUrl) {
+    let reader = null;
+    try {
+      reader = new NDEFReader();
+      await reader.scan();
+      return await new Promise((resolve) => {
+        const timeout = setTimeout(() => resolve(false), 2500);
+        reader.onreading = (event) => {
+          clearTimeout(timeout);
+          const values = (event.message?.records || []).map((record) => decodeNfcRecordData(record));
+          resolve(values.includes(expectedUrl));
+        };
+        reader.onreadingerror = () => {
+          clearTimeout(timeout);
+          resolve(false);
+        };
+      });
+    } catch {
+      return false;
+    } finally {
+      if (reader) {
+        reader.onreading = null;
+        reader.onreadingerror = null;
+      }
+    }
+  }
+
+  async function handleNfcWrite() {
+    if (!nfcForm.resource_key) {
+      setNfcWriteState((prev) => ({ ...prev, error: 'Select a track or album first.' }));
+      return;
+    }
+    if (!nfcSupport.supported) {
+      setNfcWriteState((prev) => ({ ...prev, error: nfcSupport.message || 'NFC is not supported.' }));
+      return;
+    }
+    const repeatCount = Math.min(50, Math.max(1, Number(nfcForm.repeat_count) || 1));
+    const resourceUrl = buildNfcResourceUrl(nfcForm.resource_type, nfcForm.resource_key);
+    setNfcWriteState({
+      step: 'activate',
+      status: 'Activate NFC and hold a tag near the device.',
+      written: 0,
+      verified: false,
+      error: '',
+      recentUrl: resourceUrl,
+      records: [],
+    });
+
+    for (let i = 0; i < repeatCount; i += 1) {
+      try {
+        setNfcWriteState((prev) => ({
+          ...prev,
+          step: 'detect',
+          status: `Ready for tag ${i + 1} of ${repeatCount}. Touch a tag now.`,
+        }));
+        const writer = new NDEFReader();
+        await writer.write({
+          records: [{ recordType: 'url', data: resourceUrl }],
+        });
+        setNfcWriteState((prev) => ({
+          ...prev,
+          step: 'write',
+          status: `Tag ${i + 1} written. Verifying…`,
+          written: i + 1,
+        }));
+        const verified = await verifyWrittenNfc(resourceUrl);
+        setNfcWriteState((prev) => ({
+          ...prev,
+          step: verified ? 'verify' : 'store',
+          status: verified
+            ? `Tag ${i + 1} verified and stored.`
+            : `Tag ${i + 1} stored (verification skipped).`,
+          verified,
+          records: [
+            { index: i + 1, at: new Date().toISOString(), verified },
+            ...prev.records,
+          ].slice(0, 10),
+        }));
+      } catch (err) {
+        setNfcWriteState((prev) => ({
+          ...prev,
+          step: 'error',
+          error: err?.message || 'NFC write failed.',
+          status: `Failed while writing tag ${i + 1}.`,
+        }));
+        return;
+      }
+    }
+
+    setNfcWriteState((prev) => ({
+      ...prev,
+      step: 'done',
+      status: `Finished writing ${repeatCount} tag${repeatCount > 1 ? 's' : ''}.`,
+    }));
+  }
 
   return (
     <div className="upload-area">
@@ -354,6 +473,82 @@ export default function AdminLinksView({ token, tracks, albums }) {
           </div>
         );
       })}
+
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '1.25rem', marginTop: '1.25rem' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+          <IconNfc size={14} /> NFC writer
+        </div>
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.77rem', marginBottom: '0.9rem' }}>
+          Step 1: choose resource. Step 2: activate reader, detect, write, store and verify. Repeat for multiple tags if needed.
+        </div>
+        {!nfcSupport.supported && (
+          <div className="auth-error" style={{ marginBottom: '0.75rem' }}>{nfcSupport.message || 'NFC is not available.'}</div>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '0.85rem' }}>
+          <div className="form-group">
+            <label className="form-label">Type</label>
+            <select
+              className="form-input speed-select"
+              style={{ fontSize: '0.84rem', padding: '0.55rem 0.75rem' }}
+              value={nfcForm.resource_type}
+              onChange={(e) => setNfcForm((f) => ({ ...f, resource_type: e.target.value, resource_key: '' }))}
+            >
+              <option value="track">Track</option>
+              <option value="album">Album</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">{nfcForm.resource_type === 'track' ? 'Track' : 'Album'}</label>
+            <select
+              className="form-input speed-select"
+              style={{ fontSize: '0.84rem', padding: '0.55rem 0.75rem' }}
+              value={nfcForm.resource_key}
+              onChange={(e) => setNfcForm((f) => ({ ...f, resource_key: e.target.value }))}
+            >
+              <option value="">Select…</option>
+              {nfcResourceOptions.map((r) => (
+                <option key={r.url_key || r.id} value={r.url_key || r.id}>
+                  {r.title || r.name}{r.artist ? ` — ${r.artist}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Tag count</label>
+            <input
+              className="form-input"
+              type="number"
+              min={1}
+              max={50}
+              value={nfcForm.repeat_count}
+              onChange={(e) => setNfcForm((f) => ({ ...f, repeat_count: e.target.value }))}
+            />
+          </div>
+        </div>
+        {nfcWriteState.error && <div className="auth-error" style={{ marginBottom: '0.75rem' }}>{nfcWriteState.error}</div>}
+        <button className="btn btn-primary" type="button" onClick={handleNfcWrite} disabled={!nfcSupport.supported}>
+          <IconNfc size={13} /> Write NFC tag{Number(nfcForm.repeat_count) > 1 ? 's' : ''}
+        </button>
+        {nfcWriteState.status && (
+          <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            {nfcWriteState.status}
+          </div>
+        )}
+        {nfcWriteState.recentUrl && (
+          <div style={{ marginTop: '0.4rem', fontFamily: 'monospace', fontSize: '0.7rem', color: 'var(--text-muted)', wordBreak: 'break-all' }}>
+            {nfcWriteState.recentUrl}
+          </div>
+        )}
+        {nfcWriteState.records.length > 0 && (
+          <div style={{ marginTop: '0.75rem', borderTop: '1px solid var(--border)', paddingTop: '0.6rem' }}>
+            {nfcWriteState.records.map((record) => (
+              <div key={`${record.index}-${record.at}`} style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>
+                Tag #{record.index} · {new Date(record.at).toLocaleTimeString()} · {record.verified ? 'verified' : 'stored'}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '1.25rem', marginTop: '1.25rem' }}>
         <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '1rem' }}>

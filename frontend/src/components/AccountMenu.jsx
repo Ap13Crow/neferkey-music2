@@ -7,6 +7,8 @@ export default function AccountMenu({
   onRegister,
   onProfile,
   onPreferences,
+  onToggleAudiobookMode,
+  audiobookModeActive = false,
   onDeleteAccount,
   onSignOut,
 }) {
@@ -24,7 +26,7 @@ export default function AccountMenu({
   }, []);
 
   function close(fn) {
-    return () => { fn(); setOpen(false); };
+    return () => { if (typeof fn === 'function') fn(); setOpen(false); };
   }
 
   return (
@@ -60,6 +62,9 @@ export default function AccountMenu({
               </button>
               <button className="account-dropdown-item" role="menuitem" onClick={close(onPreferences)}>
                 Preferences
+              </button>
+              <button className="account-dropdown-item" role="menuitem" onClick={close(onToggleAudiobookMode)}>
+                {audiobookModeActive ? 'Disable audiobook mode' : 'Enable audiobook mode'}
               </button>
               <div className="account-dropdown-divider" />
               <button className="account-dropdown-item account-dropdown-danger" role="menuitem" onClick={close(onDeleteAccount)}>
