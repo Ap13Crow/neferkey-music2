@@ -20,6 +20,8 @@ export default function TopBar({
   onRegister,
   onProfile,
   onPreferences,
+  onToggleAudiobookMode,
+  audiobookModeActive,
   onDeleteAccount,
   onSignOut,
   onOpenSearch,
@@ -49,6 +51,8 @@ export default function TopBar({
         onRegister={onRegister}
         onProfile={onProfile}
         onPreferences={onPreferences}
+        onToggleAudiobookMode={onToggleAudiobookMode}
+        audiobookModeActive={audiobookModeActive}
         onDeleteAccount={onDeleteAccount}
         onSignOut={onSignOut}
       />

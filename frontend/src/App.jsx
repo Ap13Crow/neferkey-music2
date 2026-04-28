@@ -10,6 +10,11 @@ import ProfileView from './components/ProfileView';
 import ConfirmModal from './components/ConfirmModal';
 import ClaimModal from './components/ClaimModal';
 import AdminLinksView from './components/AdminLinksView';
+import { IconNfc, IconNote, IconUser } from './components/Icons';
+import {
+  extractNfcResourceFromMessage,
+  isNfcSupported,
+} from './utils/nfc';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const SCORE_EXTS = '.pdf,.xml,.musicxml,.mxl';
@@ -96,6 +101,15 @@ export default function App() {
   // Purchase link claim flow
   const [claimToken, setClaimToken] = useState(null);
   const [pendingClaimToken, setPendingClaimToken] = useState(null);
+  const [audiobookMode, setAudiobookMode] = useState(false);
+  const [audiobookContextOpen, setAudiobookContextOpen] = useState(false);
+  const [audiobookAccountMenuOpen, setAudiobookAccountMenuOpen] = useState(false);
+  const [audiobookStatus, setAudiobookStatus] = useState('Ready to scan NFC tags');
+  const [audiobookError, setAudiobookError] = useState('');
+  const [audiobookResource, setAudiobookResource] = useState(null);
+  const longPressRef = useRef(null);
+  const longPressTriggeredRef = useRef(false);
+  const lastAccountTapRef = useRef(0);
 
   // On mount: check URL for ?claim= token
   useEffect(() => {
@@ -238,6 +252,158 @@ export default function App() {
     }
   }
 
+  const handleAudiobookScan = useCallback((payload) => {
+    if (!payload) return;
+    const { resource_type: resourceType, resource_key: resourceKey } = payload;
+    if (resourceType === 'track') {
+      const idx = tracks.findIndex((t) => t.url_key === resourceKey);
+      if (idx < 0) {
+        setAudiobookError('Scanned track was not found in your library.');
+        return;
+      }
+      const track = tracks[idx];
+      handlePlayTracks(tracks, idx);
+      setAudiobookStatus('Track detected and started.');
+      setAudiobookError('');
+      setAudiobookResource({
+        type: 'track',
+        title: track.title,
+        subtitle: track.artist || '',
+        image_url: track.image_url || '',
+      });
+      return;
+    }
+
+    const album = albums.find((a) => String(a.id) === String(resourceKey));
+    if (!album) {
+      setAudiobookError('Scanned album was not found in your library.');
+      return;
+    }
+    const albumTracks = Array.isArray(album.tracks) ? album.tracks : [];
+    if (albumTracks.length > 0) {
+      handlePlayTracks(albumTracks, 0);
+      setAudiobookStatus('Album detected and started.');
+    } else {
+      setAudiobookStatus('Album detected.');
+    }
+    setAudiobookError('');
+    setAudiobookResource({
+      type: 'album',
+      title: album.name,
+      subtitle: album.artist || `${albumTracks.length} tracks`,
+      image_url: album.cover_url || '',
+    });
+  }, [albums, tracks]);
+
+  useEffect(() => {
+    if (!audiobookMode) return undefined;
+    const support = isNfcSupported();
+    if (!support.mobileOnly) {
+      setAudiobookError('Audiobook mode is available on mobile devices only.');
+      return undefined;
+    }
+    if (!support.supported) {
+      setAudiobookError(support.message || 'NFC scanning is not available.');
+      return undefined;
+    }
+
+    let disposed = false;
+    let reader = null;
+
+    (async () => {
+      try {
+        reader = new NDEFReader();
+        await reader.scan();
+        if (disposed) return;
+        setAudiobookStatus('Scanning for tags…');
+        setAudiobookError('');
+        reader.onreading = (event) => {
+          if (disposed) return;
+          const payload = extractNfcResourceFromMessage(event.message);
+          if (!payload) {
+            setAudiobookError('Tag does not contain a valid Neferkey NFC link.');
+            return;
+          }
+          handleAudiobookScan(payload);
+        };
+        reader.onreadingerror = () => {
+          if (disposed) return;
+          setAudiobookError('Could not read this NFC tag.');
+        };
+      } catch (err) {
+        if (disposed) return;
+        setAudiobookError(err?.message || 'Failed to start NFC scanning.');
+      }
+    })();
+
+    return () => {
+      disposed = true;
+      if (reader) {
+        reader.onreading = null;
+        reader.onreadingerror = null;
+      }
+    };
+  }, [audiobookMode, handleAudiobookScan]);
+
+  useEffect(() => {
+    if (user) return;
+    setAudiobookMode(false);
+    setAudiobookContextOpen(false);
+    setAudiobookAccountMenuOpen(false);
+  }, [user]);
+
+  useEffect(() => () => clearTimeout(longPressRef.current), []);
+
+  function toggleAudiobookMode() {
+    if (audiobookMode) {
+      setAudiobookMode(false);
+      setAudiobookContextOpen(false);
+      setAudiobookAccountMenuOpen(false);
+      setSearchOpen(false);
+      return;
+    }
+    const support = isNfcSupported();
+    if (!support.mobileOnly) {
+      setAudiobookError('Audiobook mode is available on mobile devices only.');
+      return;
+    }
+    if (!support.supported) {
+      setAudiobookError(support.message || 'NFC scanning is not available.');
+      return;
+    }
+    setAudiobookMode(true);
+    setAudiobookContextOpen(false);
+    setAudiobookAccountMenuOpen(false);
+    setSidebarOpen(false);
+    setSearchOpen(false);
+    setAudiobookStatus('Ready to scan NFC tags');
+    setAudiobookError('');
+  }
+
+  function handleAudiobookAccountPointerDown() {
+    longPressTriggeredRef.current = false;
+    clearTimeout(longPressRef.current);
+    longPressRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      setAudiobookAccountMenuOpen(true);
+      setAudiobookContextOpen(false);
+    }, 520);
+  }
+
+  function handleAudiobookAccountPointerUp() {
+    clearTimeout(longPressRef.current);
+    if (longPressTriggeredRef.current) return;
+    const now = Date.now();
+    if (now - lastAccountTapRef.current < 280) {
+      setAudiobookAccountMenuOpen((open) => !open);
+      setAudiobookContextOpen(false);
+      lastAccountTapRef.current = 0;
+      return;
+    }
+    lastAccountTapRef.current = now;
+    setAudiobookContextOpen((open) => !open);
+  }
+
   const currentTrack = queue[queueIndex] || null;
   const canManageAllMetadata = user?.role === 'admin' || user?.role === 'manager';
   const canEditTrack = (track) => !!token && (canManageAllMetadata || track?.owner_id === user?.id);
@@ -356,44 +522,118 @@ export default function App() {
     setSidebarOpen(false);
   }
 
+  const showAudiobookMode = audiobookMode && !!user;
+
   return (
-    <div className="app-shell">
-      <Sidebar
-        view={view}
-        setView={navigateTo}
-        user={user}
-        onLogout={logout}
-        isOpen={sidebarOpen}
-      />
-      {sidebarOpen && (
-        <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+    <div className={`app-shell${showAudiobookMode ? ' audiobook-shell-mode' : ''}`}>
+      {!showAudiobookMode && (
+        <>
+          <Sidebar
+            view={view}
+            setView={navigateTo}
+            user={user}
+            onLogout={logout}
+            isOpen={sidebarOpen}
+          />
+          {sidebarOpen && (
+            <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+          )}
+        </>
       )}
 
-      <TopBar
-        viewTitle={VIEW_TITLES[view]}
-        user={user}
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen((o) => !o)}
-        onSignIn={openSignIn}
-        onRegister={openRegister}
-        onProfile={() => navigateTo('profile')}
-        onPreferences={() => navigateTo('profile')}
-        onDeleteAccount={() => setConfirmDeleteAccount(true)}
-        onSignOut={logout}
-        onOpenSearch={() => {
-          setSearchOpen(true);
-          runSearch(searchParams);
-        }}
-      />
+      {showAudiobookMode ? (
+        <div className="audiobook-top-bar">
+          <div className="audiobook-brand">
+            <IconNote size={18} />
+            <span>Neferkey</span>
+          </div>
+          <div className="audiobook-scan-indicator">
+            <IconNfc size={14} />
+            <span>Scan</span>
+          </div>
+          <button
+            className="audiobook-account-btn"
+            title="Account"
+            onPointerDown={handleAudiobookAccountPointerDown}
+            onPointerUp={handleAudiobookAccountPointerUp}
+            onPointerLeave={() => clearTimeout(longPressRef.current)}
+          >
+            {user ? <div className="account-avatar audiobook-account-avatar">{user.username.charAt(0).toUpperCase()}</div> : <IconUser size={16} />}
+          </button>
+          {audiobookAccountMenuOpen && (
+            <div className="audiobook-account-menu">
+              <button className="account-dropdown-item" onClick={() => { setAudiobookAccountMenuOpen(false); setAudiobookMode(false); }}>
+                Disable audiobook mode
+              </button>
+              <button className="account-dropdown-item" onClick={() => { setAudiobookAccountMenuOpen(false); navigateTo('profile'); }}>
+                Profile
+              </button>
+              <button className="account-dropdown-item" onClick={() => { setAudiobookAccountMenuOpen(false); logout(); }}>
+                Sign out
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <TopBar
+          viewTitle={VIEW_TITLES[view]}
+          user={user}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((o) => !o)}
+          onSignIn={openSignIn}
+          onRegister={openRegister}
+          onProfile={() => navigateTo('profile')}
+          onPreferences={() => navigateTo('profile')}
+          onToggleAudiobookMode={toggleAudiobookMode}
+          audiobookModeActive={audiobookMode}
+          onDeleteAccount={() => setConfirmDeleteAccount(true)}
+          onSignOut={logout}
+          onOpenSearch={() => {
+            setSearchOpen(true);
+            runSearch(searchParams);
+          }}
+        />
+      )}
 
-      <main className="main-content">{renderContent()}</main>
+      <main className={`main-content${showAudiobookMode ? ' audiobook-main' : ''}`}>
+        {showAudiobookMode ? (
+          <div className="audiobook-stage">
+            {!audiobookResource && (
+              <div className="audiobook-empty">
+                <IconNfc size={40} />
+                <div className="audiobook-empty-title">{audiobookStatus}</div>
+                <div className="audiobook-empty-subtitle">Hold your book page NFC tag near this phone.</div>
+              </div>
+            )}
+            {audiobookResource && (
+              <div className="audiobook-card">
+                {audiobookResource.image_url ? (
+                  <img src={audiobookResource.image_url} alt={audiobookResource.title} className="audiobook-cover" />
+                ) : (
+                  <div className="audiobook-cover audiobook-cover-placeholder"><IconNote size={36} /></div>
+                )}
+                <div className="audiobook-title">{audiobookResource.title}</div>
+                <div className="audiobook-subtitle">{audiobookResource.subtitle || audiobookResource.type}</div>
+              </div>
+            )}
+            {audiobookError && <div className="auth-error audiobook-error">{audiobookError}</div>}
+            {audiobookContextOpen && (
+              <div className="audiobook-context-panel">
+                <button className="btn btn-secondary btn-sm" onClick={() => setAudiobookContextOpen(false)}>Hide controls</button>
+              </div>
+            )}
+          </div>
+        ) : renderContent()}
+      </main>
 
-      <PlayerBar
-        queue={queue}
-        currentIndex={queueIndex}
-        onIndexChange={setQueueIndex}
-        playIntent={playIntent}
-      />
+      <div className={showAudiobookMode && !audiobookContextOpen ? 'audiobook-player-hidden' : ''}>
+        <PlayerBar
+          queue={queue}
+          currentIndex={queueIndex}
+          onIndexChange={setQueueIndex}
+          playIntent={playIntent}
+        />
+      </div>
 
       {searchOpen && (
         <SearchModal

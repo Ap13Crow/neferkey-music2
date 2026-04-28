@@ -225,3 +225,13 @@ export function IconAdmin({ size = 18 }) {
     </svg>
   );
 }
+export function IconNfc({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 7c6 0 11 5 11 11" />
+      <path d="M10 7c3.9 0 7 3.1 7 7" />
+      <path d="M14 7c1.7 0 3 1.3 3 3" />
+      <path d="M4 7v10m0 0h4m-4 0l4-4" />
+    </svg>
+  );
+}
