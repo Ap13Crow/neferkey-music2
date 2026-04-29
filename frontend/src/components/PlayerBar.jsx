@@ -54,6 +54,8 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
     if (!audio) return;
 
     const doPlay = () => {
+      audio.pause();
+      audio.currentTime = 0;
       audio.play().catch(() => {});
       setPlaying(true);
     };

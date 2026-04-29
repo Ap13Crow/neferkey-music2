@@ -14,12 +14,12 @@ import { IconNfc, IconNote, IconUser } from './components/Icons';
 import {
   extractNfcResourceFromMessage,
   isNfcSupported,
+  parseNfcResourceUrl,
 } from './utils/nfc';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const SCORE_EXTS = '.pdf,.xml,.musicxml,.mxl';
 const LONG_PRESS_TIMEOUT_MS = 520;
-const DOUBLE_TAP_THRESHOLD_MS = 280;
 
 const DEMO_TRACKS = [
   {
@@ -66,6 +66,17 @@ function clearClaimFromUrl() {
   window.history.replaceState({}, '', url.toString());
 }
 
+function getNfcPayloadFromUrl() {
+  return parseNfcResourceUrl(window.location.href);
+}
+
+function clearNfcFromUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete('nfc_type');
+  url.searchParams.delete('nfc_key');
+  window.history.replaceState({}, '', url.toString());
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem('nk_token') || null);
@@ -109,9 +120,9 @@ export default function App() {
   const [audiobookStatus, setAudiobookStatus] = useState('Ready to scan NFC tags');
   const [audiobookError, setAudiobookError] = useState('');
   const [audiobookResource, setAudiobookResource] = useState(null);
+  const [pendingNfcPayload, setPendingNfcPayload] = useState(null);
   const longPressRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
-  const lastAccountTapRef = useRef(0);
 
   // On mount: check URL for ?claim= token
   useEffect(() => {
@@ -119,6 +130,14 @@ export default function App() {
     if (t) {
       clearClaimFromUrl();
       setClaimToken(t);
+    }
+  }, []);
+
+  useEffect(() => {
+    const payload = getNfcPayloadFromUrl();
+    if (payload) {
+      clearNfcFromUrl();
+      setPendingNfcPayload(payload);
     }
   }, []);
 
@@ -298,6 +317,19 @@ export default function App() {
   }, [albums, tracks]);
 
   useEffect(() => {
+    if (!pendingNfcPayload) return;
+    if (tracks.length === 0 && albums.length === 0) return;
+    if (user) {
+      setAudiobookMode(true);
+      setAudiobookContextOpen(false);
+      setAudiobookAccountMenuOpen(false);
+      setSearchOpen(false);
+    }
+    handleAudiobookScan(pendingNfcPayload);
+    setPendingNfcPayload(null);
+  }, [albums, handleAudiobookScan, pendingNfcPayload, tracks, user]);
+
+  useEffect(() => {
     if (!audiobookMode) return undefined;
     const support = isNfcSupported();
     if (!support.mobileOnly) {
@@ -305,6 +337,11 @@ export default function App() {
       return undefined;
     }
     if (!support.supported) {
+      if (support.passiveSupported) {
+        setAudiobookStatus('Ready for NFC links. On iPhone, scan a tag and open the iOS notification banner.');
+        setAudiobookError('');
+        return undefined;
+      }
       setAudiobookError(support.message || 'NFC scanning is not available.');
       return undefined;
     }
@@ -370,6 +407,16 @@ export default function App() {
       return;
     }
     if (!support.supported) {
+      if (support.passiveSupported) {
+        setAudiobookMode(true);
+        setAudiobookContextOpen(false);
+        setAudiobookAccountMenuOpen(false);
+        setSidebarOpen(false);
+        setSearchOpen(false);
+        setAudiobookStatus('Ready for NFC links. On iPhone, scan a tag and open the iOS notification banner.');
+        setAudiobookError('');
+        return;
+      }
       setAudiobookError(support.message || 'NFC scanning is not available.');
       return;
     }
@@ -395,14 +442,7 @@ export default function App() {
   function handleAudiobookAccountPointerUp() {
     clearTimeout(longPressRef.current);
     if (longPressTriggeredRef.current) return;
-    const now = Date.now();
-    if (now - lastAccountTapRef.current < DOUBLE_TAP_THRESHOLD_MS) {
-      setAudiobookAccountMenuOpen((open) => !open);
-      setAudiobookContextOpen(false);
-      lastAccountTapRef.current = 0;
-      return;
-    }
-    lastAccountTapRef.current = now;
+    setAudiobookAccountMenuOpen(false);
     setAudiobookContextOpen((open) => !open);
   }
 
@@ -526,8 +566,10 @@ export default function App() {
 
   const showAudiobookMode = audiobookMode && !!user;
 
+  const hideAudiobookPlayer = showAudiobookMode && !audiobookContextOpen;
+
   return (
-    <div className={`app-shell${showAudiobookMode ? ' audiobook-shell-mode' : ''}`}>
+    <div className={`app-shell${showAudiobookMode ? ' audiobook-shell-mode' : ''}${hideAudiobookPlayer ? ' audiobook-player-collapsed' : ''}`}>
       {!showAudiobookMode && (
         <>
           <Sidebar
@@ -619,16 +661,11 @@ export default function App() {
               </div>
             )}
             {audiobookError && <div className="auth-error audiobook-error">{audiobookError}</div>}
-            {audiobookContextOpen && (
-              <div className="audiobook-context-panel">
-                <button className="btn btn-secondary btn-sm" onClick={() => setAudiobookContextOpen(false)}>Hide controls</button>
-              </div>
-            )}
           </div>
         ) : renderContent()}
       </main>
 
-      <div className={showAudiobookMode && !audiobookContextOpen ? 'audiobook-player-hidden' : ''}>
+      <div className={hideAudiobookPlayer ? 'audiobook-player-hidden' : ''}>
         <PlayerBar
           queue={queue}
           currentIndex={queueIndex}
