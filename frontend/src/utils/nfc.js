@@ -28,11 +28,15 @@ export function isNfcSupported(win = window) {
   const hasReader = typeof win?.NDEFReader === 'function';
   const mobile = !!win?.matchMedia?.(NFC_MOBILE_MEDIA_QUERY)?.matches;
   const { ios, android, safari } = getPlatformHints(win);
+  const passiveSupported = ios;
+  const webNfcSupported = secure && hasReader;
   const unsupportedMessage = ios && safari
-    ? 'Web NFC is not available on iPhone/iPad Safari. Use Android Chrome for NFC.'
+    ? 'Web NFC is not available on iPhone/iPad Safari, but iOS can still open NDEF URL tags in the background.'
     : 'NFC is not available in this browser/device.';
   return {
-    supported: secure && hasReader,
+    supported: webNfcSupported,
+    webNfcSupported,
+    passiveSupported,
     secure,
     hasReader,
     mobile,

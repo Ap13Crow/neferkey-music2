@@ -1004,6 +1004,9 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
 .app-shell.audiobook-shell-mode {
   grid-template-columns: 1fr;
 }
+.app-shell.audiobook-shell-mode.audiobook-player-collapsed {
+  grid-template-rows: var(--topbar-h) 1fr 0;
+}
 .audiobook-top-bar {
   grid-column: 1;
   grid-row: 1;
@@ -1130,22 +1133,11 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
   z-index: 90;
 }
 .audiobook-player-hidden .player-bar {
-  transform: translateY(110%);
-  pointer-events: none;
+  display: none;
 }
 
 /* ─── Responsive (mobile) ────────────────────────────────────── */
 @media (max-width: 1024px) {
-  .player-mini-btn { display: none; }
-  .player-bar { gap: 0.55rem; padding: 0 0.75rem var(--safe-bottom); }
-  .player-bar-track { display: none; }
-  .player-controls { flex: 1 1 auto; min-width: 0; gap: 0.3rem; }
-  .player-buttons { width: 100%; justify-content: center; gap: 0.35rem; }
-  .progress-row { display: none; }
-  .player-extras { display: none; }
-  .player-settings-btn { display: inline-flex; }
-  .player-settings-popover { display: flex; flex-direction: column; }
-  .player-settings-popover .volume-slider { width: 100px; }
   .search-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .track-edit-modal .upload-item-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -1211,6 +1203,16 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
   .album-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
 
   .ctrl-btn { padding: 0.25rem; }
+  .app-shell:not(.audiobook-shell-mode) .player-mini-btn { display: none; }
+  .app-shell:not(.audiobook-shell-mode) .player-bar { gap: 0.55rem; padding: 0 0.75rem var(--safe-bottom); }
+  .app-shell:not(.audiobook-shell-mode) .player-bar-track { display: none; }
+  .app-shell:not(.audiobook-shell-mode) .player-controls { flex: 1 1 auto; min-width: 0; gap: 0.3rem; }
+  .app-shell:not(.audiobook-shell-mode) .player-buttons { width: 100%; justify-content: center; gap: 0.35rem; }
+  .app-shell:not(.audiobook-shell-mode) .progress-row { display: none; }
+  .app-shell:not(.audiobook-shell-mode) .player-extras { display: none; }
+  .app-shell:not(.audiobook-shell-mode) .player-settings-btn { display: inline-flex; }
+  .app-shell:not(.audiobook-shell-mode) .player-settings-popover { display: flex; flex-direction: column; }
+  .app-shell:not(.audiobook-shell-mode) .player-settings-popover .volume-slider { width: 100px; }
   .player-settings-popover { right: 0.5rem; min-width: 155px; }
   .player-settings-popover .speed-select { font-size: 0.68rem; padding: 0.15rem 0.3rem; }
   .search-filters { grid-template-columns: 1fr; }
