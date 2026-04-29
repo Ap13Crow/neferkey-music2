@@ -10,6 +10,7 @@ import ConfirmModal from './components/ConfirmModal';
 import { IconUser } from './components/Icons';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+const MOBILE_BREAKPOINT = 640;
 
 const DEMO_TRACKS = [
   {
@@ -59,7 +60,7 @@ export default function App() {
     window.history.replaceState({}, '', nextUrl);
     return nfcKey;
   });
-  const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia('(max-width: 640px)').matches);
+  const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches);
   const [mobilePlayerEnabled, setMobilePlayerEnabled] = useState(false);
 
   const [confirmDeleteTrack, setConfirmDeleteTrack] = useState(null); // { urlKey, title }
@@ -101,7 +102,7 @@ export default function App() {
   useEffect(() => { loadAlbums(); }, [loadAlbums]);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(max-width: 640px)');
+    const mediaQuery = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`);
     const onChange = (event) => setIsMobileViewport(event.matches);
     mediaQuery.addEventListener('change', onChange);
     return () => mediaQuery.removeEventListener('change', onChange);
