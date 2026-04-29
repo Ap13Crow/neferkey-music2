@@ -20,7 +20,7 @@ import {
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const SCORE_EXTS = '.pdf,.xml,.musicxml,.mxl';
 const LONG_PRESS_TIMEOUT_MS = 520;
-const AUDIOBOOK_MARQUEE_SEPARATOR = '\u00A0\u2022\u00A0';
+const NOW_PLAYING_SEPARATOR = '\u00A0\u2022\u00A0';
 
 const DEMO_TRACKS = [
   {
@@ -568,7 +568,6 @@ export default function App() {
   const showAudiobookMode = audiobookMode && !!user;
 
   const hideAudiobookPlayer = showAudiobookMode && !audiobookContextOpen;
-  const audiobookNowPlayingText = currentTrack?.title ? `Now playing: ${currentTrack.title}` : '';
 
   return (
     <div className={`app-shell${showAudiobookMode ? ' audiobook-shell-mode' : ''}${hideAudiobookPlayer ? ' audiobook-player-collapsed' : ''}`}>
@@ -662,7 +661,7 @@ export default function App() {
                 <div className="audiobook-subtitle">{audiobookResource.subtitle || audiobookResource.type}</div>
                 {audiobookResource.type === 'album' && currentTrack?.title && (
                   <div className="audiobook-track-marquee" aria-live="polite">
-                    <span>{`${audiobookNowPlayingText}${AUDIOBOOK_MARQUEE_SEPARATOR}${audiobookNowPlayingText}`}</span>
+                    <span>{`Now playing: ${currentTrack.title}${NOW_PLAYING_SEPARATOR}Now playing: ${currentTrack.title}`}</span>
                   </div>
                 )}
               </div>
