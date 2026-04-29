@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import AuthScreen from './components/AuthScreen';
 import Sidebar from './components/Sidebar';
 import PlayerBar from './components/PlayerBar';
@@ -7,6 +7,7 @@ import AlbumsView from './components/AlbumsView';
 import UploadView from './components/UploadView';
 import ProfileView from './components/ProfileView';
 import ConfirmModal from './components/ConfirmModal';
+import { IconUser } from './components/Icons';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
@@ -44,6 +45,9 @@ export default function App() {
 
   const [queue, setQueue] = useState(DEMO_TRACKS);
   const [queueIndex, setQueueIndex] = useState(0);
+  const [playRequestId, setPlayRequestId] = useState(0);
+  const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia('(max-width: 640px)').matches);
+  const [mobilePlayerEnabled, setMobilePlayerEnabled] = useState(false);
 
   const [confirmDeleteTrack, setConfirmDeleteTrack] = useState(null); // { urlKey, title }
 
@@ -83,6 +87,34 @@ export default function App() {
   useEffect(() => { loadTracks(); }, [loadTracks]);
   useEffect(() => { loadAlbums(); }, [loadAlbums]);
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 640px)');
+    const onChange = (event) => setIsMobileViewport(event.matches);
+    mediaQuery.addEventListener('change', onChange);
+    return () => mediaQuery.removeEventListener('change', onChange);
+  }, []);
+
+  useEffect(() => {
+    if (tracks.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('nfc_type') !== 'track') return;
+    const nfcKey = params.get('nfc_key');
+    if (!nfcKey) return;
+    const nextIndex = tracks.findIndex((item) => item.url_key === nfcKey);
+    if (nextIndex === -1) return;
+
+    setQueue(tracks);
+    setQueueIndex(nextIndex);
+    setPlayRequestId((id) => id + 1);
+    setMobilePlayerEnabled(true);
+
+    params.delete('nfc_type');
+    params.delete('nfc_key');
+    const nextQuery = params.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, '', nextUrl);
+  }, [tracks]);
+
   function handleAuth(newUser, newToken) {
     setUser(newUser);
     setToken(newToken);
@@ -118,6 +150,7 @@ export default function App() {
   }
 
   const currentTrack = queue[queueIndex] || null;
+  const showPlayerBar = useMemo(() => !isMobileViewport || mobilePlayerEnabled, [isMobileViewport, mobilePlayerEnabled]);
 
   function renderContent() {
     switch (view) {
@@ -196,10 +229,29 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${showPlayerBar ? '' : ' player-hidden'}`}>
+      {isMobileViewport && (
+        <button
+          className="mobile-account-btn"
+          type="button"
+          title="Open profile and audio controls"
+          onClick={() => {
+            setView('profile');
+            setMobilePlayerEnabled(true);
+          }}
+        >
+          <IconUser size={16} />
+        </button>
+      )}
       <Sidebar view={view} setView={setView} user={user} onLogout={logout} />
       <main className="main-content">{renderContent()}</main>
-      <PlayerBar queue={queue} currentIndex={queueIndex} onIndexChange={setQueueIndex} />
+      <PlayerBar
+        queue={queue}
+        currentIndex={queueIndex}
+        onIndexChange={setQueueIndex}
+        hidden={!showPlayerBar}
+        playRequestId={playRequestId}
+      />
       {confirmDeleteTrack && (
         <ConfirmModal
           message={`Permanently delete "${confirmDeleteTrack.title}"? This cannot be undone.`}

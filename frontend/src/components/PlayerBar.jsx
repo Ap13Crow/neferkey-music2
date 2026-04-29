@@ -11,7 +11,7 @@ function fmt(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export default function PlayerBar({ queue, currentIndex, onIndexChange }) {
+export default function PlayerBar({ queue, currentIndex, onIndexChange, hidden = false, playRequestId = 0 }) {
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -40,6 +40,17 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange }) {
     if (playing) audio.play().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [track]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !track || !playRequestId) return;
+    audio.pause();
+    audio.currentTime = 0;
+    setCurrentTime(0);
+    audio.load();
+    audio.play().catch(() => {});
+    setPlaying(true);
+  }, [playRequestId, track]);
 
   function togglePlay() {
     const audio = audioRef.current;
@@ -84,7 +95,7 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange }) {
         />
       )}
 
-      <div className="player-bar">
+      <div className={`player-bar${hidden ? ' is-hidden' : ''}`}>
         {/* Track info */}
         <div className="player-bar-track">
           {track?.image_url ? (
