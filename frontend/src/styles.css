@@ -393,6 +393,27 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
   max-width: 33%;
   justify-content: flex-end;
 }
+.player-bar.audiobook-player-bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0 0.85rem var(--safe-bottom);
+}
+.player-bar.audiobook-player-bar .player-controls {
+  grid-column: 2;
+  margin-inline: 0;
+}
+.player-bar.audiobook-player-bar .player-buttons {
+  gap: 0.55rem;
+}
+.player-bar.audiobook-player-bar .player-extras {
+  grid-column: 3;
+  justify-self: end;
+  justify-content: flex-end;
+  max-width: none;
+  flex: 0 1 auto;
+}
 .volume-row { display: flex; align-items: center; gap: 0.4rem; }
 .volume-slider {
   width: 70px;
@@ -1116,6 +1137,25 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
   color: var(--text-secondary);
   text-align: center;
 }
+.audiobook-track-marquee {
+  width: min(92vw, 420px);
+  overflow: hidden;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.audiobook-track-marquee span {
+  display: inline-block;
+  padding: 0.35rem 0.8rem;
+  animation: audiobook-marquee 14s linear infinite;
+}
+@keyframes audiobook-marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
 .audiobook-error {
   max-width: min(440px, 100%);
 }
@@ -1227,11 +1267,23 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
   /* Section header */
   .section-header { padding: 1rem 1rem 0.5rem; }
   .audiobook-cover { width: min(86vw, 360px); }
+  .player-bar.audiobook-player-bar {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 0.4rem;
+  }
+  .player-bar.audiobook-player-bar .player-controls {
+    grid-column: 1;
+  }
+  .player-bar.audiobook-player-bar .player-extras {
+    grid-column: 1;
+    justify-self: center;
+  }
 }
 
 /* Very small screens (< 380px, e.g. iPhone SE) */
 @media (max-width: 380px) {
-  .player-extras .speed-select,
-  .player-settings-popover .speed-select { display: none; }
-  .player-extras .volume-row { display: none; }
+  .app-shell:not(.audiobook-shell-mode) .player-extras .speed-select,
+  .app-shell:not(.audiobook-shell-mode) .player-settings-popover .speed-select { display: none; }
+  .app-shell:not(.audiobook-shell-mode) .player-extras .volume-row { display: none; }
 }

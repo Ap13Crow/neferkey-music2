@@ -658,6 +658,11 @@ export default function App() {
                 )}
                 <div className="audiobook-title">{audiobookResource.title}</div>
                 <div className="audiobook-subtitle">{audiobookResource.subtitle || audiobookResource.type}</div>
+                {audiobookResource.type === 'album' && currentTrack?.title && (
+                  <div className="audiobook-track-marquee" aria-label={`Now playing ${currentTrack.title}`}>
+                    <span>{`Now playing: ${currentTrack.title} \u00A0\u2022\u00A0 Now playing: ${currentTrack.title}`}</span>
+                  </div>
+                )}
               </div>
             )}
             {audiobookError && <div className="auth-error audiobook-error">{audiobookError}</div>}
@@ -671,6 +676,7 @@ export default function App() {
           currentIndex={queueIndex}
           onIndexChange={setQueueIndex}
           playIntent={playIntent}
+          audiobookMode={showAudiobookMode}
         />
       </div>
 

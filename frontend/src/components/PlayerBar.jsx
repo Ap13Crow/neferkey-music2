@@ -12,7 +12,13 @@ function fmt(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export default function PlayerBar({ queue, currentIndex, onIndexChange, playIntent }) {
+export default function PlayerBar({
+  queue,
+  currentIndex,
+  onIndexChange,
+  playIntent,
+  audiobookMode = false,
+}) {
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -117,6 +123,8 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
     }
   }
 
+  const effectiveCollapsed = !audiobookMode && collapsed;
+
   return (
     <>
       {track && (
@@ -133,38 +141,38 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
         />
       )}
 
-      <div className={`player-bar${collapsed ? ' mini' : ''}`}>
-        {/* Collapse/expand toggle */}
-        <button
-          className="player-mini-btn"
-          onClick={() => setCollapsed((c) => !c)}
-          title={collapsed ? 'Expand player' : 'Collapse player'}
-          aria-label={collapsed ? 'Expand player' : 'Collapse player'}
-        >
-          {collapsed ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
-        </button>
+      <div className={`player-bar${effectiveCollapsed ? ' mini' : ''}${audiobookMode ? ' audiobook-player-bar' : ''}`}>
+        {!audiobookMode && (
+          <button
+            className="player-mini-btn"
+            onClick={() => setCollapsed((c) => !c)}
+            title={collapsed ? 'Expand player' : 'Collapse player'}
+            aria-label={collapsed ? 'Expand player' : 'Collapse player'}
+          >
+            {collapsed ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
+          </button>
+        )}
 
-        {/* Track info */}
-        <div className="player-bar-track">
-          {track?.image_url ? (
-            <img className="player-bar-cover" src={track.image_url} alt={track.title} />
-          ) : (
-            <div className="player-bar-cover-placeholder"><IconNote size={22} /></div>
-          )}
-          <div className="player-bar-info">
-            <div className="player-bar-title">{track?.title || 'No track selected'}</div>
-            <div className="player-bar-artist">{track?.artist || ''}</div>
+        {!audiobookMode && (
+          <div className="player-bar-track">
+            {track?.image_url ? (
+              <img className="player-bar-cover" src={track.image_url} alt={track.title} />
+            ) : (
+              <div className="player-bar-cover-placeholder"><IconNote size={22} /></div>
+            )}
+            <div className="player-bar-info">
+              <div className="player-bar-title">{track?.title || 'No track selected'}</div>
+              <div className="player-bar-artist">{track?.artist || ''}</div>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Play/pause always visible (even in mini) */}
-        {collapsed && (
+        {effectiveCollapsed && (
           <button className="ctrl-btn primary" title={playing ? 'Pause' : 'Play'} onClick={togglePlay} style={{ flexShrink: 0 }}>
             {playing ? <IconPause size={18} /> : <IconPlay size={18} />}
           </button>
         )}
 
-        {/* Full controls — hidden when collapsed */}
         <div className="player-controls">
           <div className="player-buttons">
             <button className="ctrl-btn" title="Previous" onClick={() => onIndexChange((currentIndex - 1 + queue.length) % queue.length)}>
@@ -184,19 +192,21 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
             </button>
           </div>
 
-          <div className="progress-row">
-            <span className="progress-time">{fmt(currentTime)}</span>
-            <input
-              className="progress-bar"
-              type="range"
-              min={0}
-              max={duration || 1}
-              step={0.1}
-              value={currentTime}
-              onChange={seek}
-            />
-            <span className="progress-time">{fmt(duration)}</span>
-          </div>
+          {!audiobookMode && (
+            <div className="progress-row">
+              <span className="progress-time">{fmt(currentTime)}</span>
+              <input
+                className="progress-bar"
+                type="range"
+                min={0}
+                max={duration || 1}
+                step={0.1}
+                value={currentTime}
+                onChange={seek}
+              />
+              <span className="progress-time">{fmt(duration)}</span>
+            </div>
+          )}
         </div>
 
         {/* Extras */}
@@ -223,38 +233,42 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
           </select>
         </div>
 
-        <button
-          className="ctrl-btn player-settings-btn"
-          title="Playback settings"
-          aria-label="Playback settings"
-          onClick={() => setSettingsOpen((v) => !v)}
-        >
-          <IconKebabVertical size={16} />
-        </button>
+        {!audiobookMode && (
+          <>
+            <button
+              className="ctrl-btn player-settings-btn"
+              title="Playback settings"
+              aria-label="Playback settings"
+              onClick={() => setSettingsOpen((v) => !v)}
+            >
+              <IconKebabVertical size={16} />
+            </button>
 
-        {settingsOpen && (
-          <div className="player-settings-popover">
-            <div className="volume-row">
-              <IconVolume size={16} />
-              <input
-                className="volume-slider"
-                type="range"
-                min={0}
-                max={1}
-                step={0.02}
-                value={volume}
-                onChange={(e) => setVolume(Number(e.target.value))}
-              />
-            </div>
-            <select className="speed-select" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
-              <option value={0.5}>0.5×</option>
-              <option value={0.75}>0.75×</option>
-              <option value={1}>1×</option>
-              <option value={1.25}>1.25×</option>
-              <option value={1.5}>1.5×</option>
-              <option value={2}>2×</option>
-            </select>
-          </div>
+            {settingsOpen && (
+              <div className="player-settings-popover">
+                <div className="volume-row">
+                  <IconVolume size={16} />
+                  <input
+                    className="volume-slider"
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.02}
+                    value={volume}
+                    onChange={(e) => setVolume(Number(e.target.value))}
+                  />
+                </div>
+                <select className="speed-select" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
+                  <option value={0.5}>0.5×</option>
+                  <option value={0.75}>0.75×</option>
+                  <option value={1}>1×</option>
+                  <option value={1.25}>1.25×</option>
+                  <option value={1.5}>1.5×</option>
+                  <option value={2}>2×</option>
+                </select>
+              </div>
+            )}
+          </>
         )}
       </div>
     </>
