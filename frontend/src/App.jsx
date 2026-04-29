@@ -89,6 +89,7 @@ function OverflowMarquee({ text, className, ariaLive }) {
     if (!containerEl || !contentEl) return undefined;
 
     const measure = () => {
+      // Small tolerance avoids false positives from subpixel rounding differences between browsers.
       setOverflowing(contentEl.scrollWidth > containerEl.clientWidth + OVERFLOW_TOLERANCE_PX);
     };
 
@@ -108,7 +109,7 @@ function OverflowMarquee({ text, className, ariaLive }) {
   return (
     <div
       ref={containerRef}
-      className={`${className}${overflowing ? ' overflow-marquee overflow-marquee-active' : ''}`}
+      className={[className, overflowing ? 'overflow-marquee overflow-marquee-active' : ''].filter(Boolean).join(' ')}
       aria-live={ariaLive}
     >
       <span ref={contentRef}>{text}</span>
