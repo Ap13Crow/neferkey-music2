@@ -20,7 +20,7 @@ import {
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const SCORE_EXTS = '.pdf,.xml,.musicxml,.mxl';
 const LONG_PRESS_TIMEOUT_MS = 520;
-const OVERFLOW_TOLERANCE_PX = 2;
+const MARQUEE_OVERFLOW_TOLERANCE_PX = 2;
 
 const DEMO_TRACKS = [
   {
@@ -91,7 +91,7 @@ function OverflowMarquee({ text, className, ariaLive }) {
 
     const measureNow = () => {
       // Small tolerance avoids false positives from subpixel rounding differences between browsers.
-      setOverflowing(contentEl.scrollWidth > containerEl.clientWidth + OVERFLOW_TOLERANCE_PX);
+      setOverflowing(contentEl.scrollWidth > containerEl.clientWidth + MARQUEE_OVERFLOW_TOLERANCE_PX);
     };
     const scheduleMeasure = () => {
       if (rafId) return;
@@ -327,7 +327,15 @@ export default function App() {
     const { resource_type: resourceType, resource_key: resourceKey } = payload;
     if (resourceType === 'track') {
       const resourceKeyStr = String(resourceKey);
-      const idx = tracks.findIndex((t) => String(t.url_key) === resourceKeyStr || String(t.id) === resourceKeyStr);
+      const resourceKeyNum = Number(resourceKeyStr);
+      const hasNumericKey = Number.isFinite(resourceKeyNum);
+      const idx = tracks.findIndex((t) => (
+        t.url_key === resourceKey
+        || t.url_key === resourceKeyStr
+        || t.id === resourceKey
+        || t.id === resourceKeyStr
+        || (hasNumericKey && t.id === resourceKeyNum)
+      ));
       if (idx < 0) {
         setAudiobookError('Scanned track was not found in your library.');
         return;

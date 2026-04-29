@@ -19,6 +19,7 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --player-h:     calc(88px + var(--safe-bottom));
   --player-mini-h: calc(52px + var(--safe-bottom));
+  --audiobook-title-max-w: 420px;
   font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
   font-size: 14px;
   color-scheme: dark;
@@ -1140,7 +1141,7 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
   color: var(--text-muted);
 }
 .audiobook-title {
-  width: min(92vw, 420px);
+  width: min(92vw, var(--audiobook-title-max-w));
   font-size: 1.3rem;
   font-weight: 800;
   text-align: center;
@@ -1153,7 +1154,7 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
   text-align: center;
 }
 .audiobook-track-marquee {
-  width: min(92vw, 420px);
+  width: min(92vw, var(--audiobook-title-max-w));
   overflow: hidden;
   border-radius: 999px;
   border: 1px solid var(--border);
