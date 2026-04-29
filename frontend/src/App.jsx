@@ -567,6 +567,7 @@ export default function App() {
   const showAudiobookMode = audiobookMode && !!user;
 
   const hideAudiobookPlayer = showAudiobookMode && !audiobookContextOpen;
+  const audiobookNowPlayingText = currentTrack?.title ? `Now playing: ${currentTrack.title}` : '';
 
   return (
     <div className={`app-shell${showAudiobookMode ? ' audiobook-shell-mode' : ''}${hideAudiobookPlayer ? ' audiobook-player-collapsed' : ''}`}>
@@ -660,7 +661,7 @@ export default function App() {
                 <div className="audiobook-subtitle">{audiobookResource.subtitle || audiobookResource.type}</div>
                 {audiobookResource.type === 'album' && currentTrack?.title && (
                   <div className="audiobook-track-marquee" aria-label={`Now playing ${currentTrack.title}`}>
-                    <span>{`Now playing: ${currentTrack.title} \u00A0\u2022\u00A0 Now playing: ${currentTrack.title}`}</span>
+                    <span>{`${audiobookNowPlayingText} \u00A0\u2022\u00A0 ${audiobookNowPlayingText}`}</span>
                   </div>
                 )}
               </div>
