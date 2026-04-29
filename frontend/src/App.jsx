@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import AuthScreen from './components/AuthScreen';
 import Sidebar from './components/Sidebar';
 import PlayerBar from './components/PlayerBar';
@@ -46,6 +46,19 @@ export default function App() {
   const [queue, setQueue] = useState(DEMO_TRACKS);
   const [queueIndex, setQueueIndex] = useState(0);
   const [playRequestId, setPlayRequestId] = useState(0);
+  const [pendingNfcKey, setPendingNfcKey] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('nfc_type') !== 'track') return null;
+    const nfcKey = params.get('nfc_key');
+    if (!nfcKey) return null;
+
+    params.delete('nfc_type');
+    params.delete('nfc_key');
+    const nextQuery = params.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, '', nextUrl);
+    return nfcKey;
+  });
   const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia('(max-width: 640px)').matches);
   const [mobilePlayerEnabled, setMobilePlayerEnabled] = useState(false);
 
@@ -95,25 +108,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (tracks.length === 0) return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('nfc_type') !== 'track') return;
-    const nfcKey = params.get('nfc_key');
-    if (!nfcKey) return;
-    const nextIndex = tracks.findIndex((item) => item.url_key === nfcKey);
+    if (tracks.length === 0 || !pendingNfcKey) return;
+    const nextIndex = tracks.findIndex((item) => item.url_key === pendingNfcKey);
     if (nextIndex === -1) return;
 
     setQueue(tracks);
     setQueueIndex(nextIndex);
     setPlayRequestId((id) => id + 1);
     setMobilePlayerEnabled(true);
-
-    params.delete('nfc_type');
-    params.delete('nfc_key');
-    const nextQuery = params.toString();
-    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`;
-    window.history.replaceState({}, '', nextUrl);
-  }, [tracks]);
+    setPendingNfcKey(null);
+  }, [pendingNfcKey, tracks]);
 
   function handleAuth(newUser, newToken) {
     setUser(newUser);
@@ -150,7 +154,7 @@ export default function App() {
   }
 
   const currentTrack = queue[queueIndex] || null;
-  const showPlayerBar = useMemo(() => !isMobileViewport || mobilePlayerEnabled, [isMobileViewport, mobilePlayerEnabled]);
+  const showPlayerBar = !isMobileViewport || mobilePlayerEnabled;
 
   function renderContent() {
     switch (view) {

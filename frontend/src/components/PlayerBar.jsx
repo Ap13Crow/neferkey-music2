@@ -50,7 +50,7 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, hidden =
     audio.load();
     audio.play().catch(() => {});
     setPlaying(true);
-  }, [playRequestId, track]);
+  }, [playRequestId]);
 
   function togglePlay() {
     const audio = audioRef.current;
