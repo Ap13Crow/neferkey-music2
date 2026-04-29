@@ -54,10 +54,18 @@ export default function PlayerBar({ queue, currentIndex, onIndexChange, playInte
     if (!audio) return;
 
     const doPlay = () => {
-      audio.pause();
-      audio.currentTime = 0;
-      audio.play().catch(() => {});
-      setPlaying(true);
+      const start = () => {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+        setPlaying(true);
+      };
+      if (audio.readyState >= 1) {
+        start();
+        return;
+      }
+      audio.addEventListener('loadedmetadata', start, { once: true });
+      audio.load();
     };
 
     if (audio.readyState >= 2) {

@@ -442,7 +442,7 @@ export default function App() {
   function handleAudiobookAccountPointerUp() {
     clearTimeout(longPressRef.current);
     if (longPressTriggeredRef.current) return;
-    setAudiobookAccountMenuOpen(false);
+    if (audiobookAccountMenuOpen) setAudiobookAccountMenuOpen(false);
     setAudiobookContextOpen((open) => !open);
   }
 
