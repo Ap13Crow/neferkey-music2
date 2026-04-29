@@ -20,6 +20,7 @@ import {
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const SCORE_EXTS = '.pdf,.xml,.musicxml,.mxl';
 const LONG_PRESS_TIMEOUT_MS = 520;
+const OVERFLOW_TOLERANCE_PX = 2;
 
 const DEMO_TRACKS = [
   {
@@ -88,7 +89,7 @@ function OverflowMarquee({ text, className, ariaLive }) {
     if (!containerEl || !contentEl) return undefined;
 
     const measure = () => {
-      setOverflowing(contentEl.scrollWidth > containerEl.clientWidth + 2);
+      setOverflowing(contentEl.scrollWidth > containerEl.clientWidth + OVERFLOW_TOLERANCE_PX);
     };
 
     measure();
@@ -315,7 +316,8 @@ export default function App() {
     if (!payload) return;
     const { resource_type: resourceType, resource_key: resourceKey } = payload;
     if (resourceType === 'track') {
-      const idx = tracks.findIndex((t) => String(t.url_key) === String(resourceKey) || String(t.id) === String(resourceKey));
+      const resourceKeyStr = String(resourceKey);
+      const idx = tracks.findIndex((t) => String(t.url_key) === resourceKeyStr || String(t.id) === resourceKeyStr);
       if (idx < 0) {
         setAudiobookError('Scanned track was not found in your library.');
         return;
