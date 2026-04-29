@@ -20,7 +20,7 @@ import {
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const SCORE_EXTS = '.pdf,.xml,.musicxml,.mxl';
 const LONG_PRESS_TIMEOUT_MS = 520;
-const NOW_PLAYING_SEPARATOR = '\u00A0\u2022\u00A0';
+const MARQUEE_OVERFLOW_TOLERANCE_PX = 2;
 
 const DEMO_TRACKS = [
   {
@@ -76,6 +76,54 @@ function clearNfcFromUrl() {
   url.searchParams.delete('nfc_type');
   url.searchParams.delete('nfc_key');
   window.history.replaceState({}, '', url.toString());
+}
+
+function OverflowMarquee({ text, className, ariaLive }) {
+  const containerRef = useRef(null);
+  const contentRef = useRef(null);
+  const [overflowing, setOverflowing] = useState(false);
+
+  useEffect(() => {
+    const containerEl = containerRef.current;
+    const contentEl = contentRef.current;
+    if (!containerEl || !contentEl) return undefined;
+    let rafId = 0;
+
+    const measureNow = () => {
+      // Small tolerance avoids false positives from subpixel rounding differences between browsers.
+      setOverflowing(contentEl.scrollWidth > containerEl.clientWidth + MARQUEE_OVERFLOW_TOLERANCE_PX);
+    };
+    const scheduleMeasure = () => {
+      if (rafId) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = 0;
+        measureNow();
+      });
+    };
+
+    measureNow();
+    const resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleMeasure) : null;
+    if (resizeObserver) {
+      resizeObserver.observe(containerEl);
+      resizeObserver.observe(contentEl);
+    }
+    window.addEventListener('resize', scheduleMeasure);
+    return () => {
+      window.removeEventListener('resize', scheduleMeasure);
+      resizeObserver?.disconnect();
+      if (rafId) window.cancelAnimationFrame(rafId);
+    };
+  }, [text]);
+
+  return (
+    <div
+      ref={containerRef}
+      className={[className, 'overflow-marquee', overflowing ? 'overflow-marquee-active' : ''].filter(Boolean).join(' ')}
+      aria-live={ariaLive}
+    >
+      <span ref={contentRef}>{text}</span>
+    </div>
+  );
 }
 
 export default function App() {
@@ -278,7 +326,16 @@ export default function App() {
     if (!payload) return;
     const { resource_type: resourceType, resource_key: resourceKey } = payload;
     if (resourceType === 'track') {
-      const idx = tracks.findIndex((t) => t.url_key === resourceKey);
+      const resourceKeyStr = String(resourceKey);
+      const resourceKeyNum = Number(resourceKeyStr);
+      const hasNumericKey = Number.isFinite(resourceKeyNum);
+      const idx = tracks.findIndex((t) => (
+        t.url_key === resourceKey
+        || t.url_key === resourceKeyStr
+        || t.id === resourceKey
+        || t.id === resourceKeyStr
+        || (hasNumericKey && t.id === resourceKeyNum)
+      ));
       if (idx < 0) {
         setAudiobookError('Scanned track was not found in your library.');
         return;
@@ -568,9 +625,6 @@ export default function App() {
   const showAudiobookMode = audiobookMode && !!user;
 
   const hideAudiobookPlayer = showAudiobookMode && !audiobookContextOpen;
-  const albumNowPlayingMarqueeText = currentTrack?.title
-    ? `Now playing: ${currentTrack.title}${NOW_PLAYING_SEPARATOR}Now playing: ${currentTrack.title}`
-    : '';
 
   return (
     <div className={`app-shell${showAudiobookMode ? ' audiobook-shell-mode' : ''}${hideAudiobookPlayer ? ' audiobook-player-collapsed' : ''}`}>
@@ -660,12 +714,10 @@ export default function App() {
                 ) : (
                   <div className="audiobook-cover audiobook-cover-placeholder"><IconNote size={36} /></div>
                 )}
-                <div className="audiobook-title">{audiobookResource.title}</div>
+                <OverflowMarquee text={audiobookResource.title} className="audiobook-title" />
                 <div className="audiobook-subtitle">{audiobookResource.subtitle || audiobookResource.type}</div>
                 {audiobookResource.type === 'album' && currentTrack?.title && (
-                  <div className="audiobook-track-marquee" aria-live="polite">
-                    <span>{albumNowPlayingMarqueeText}</span>
-                  </div>
+                  <OverflowMarquee text={`Now playing: ${currentTrack.title}`} className="audiobook-track-marquee" ariaLive="polite" />
                 )}
               </div>
             )}
