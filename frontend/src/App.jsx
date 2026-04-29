@@ -20,7 +20,6 @@ import {
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const SCORE_EXTS = '.pdf,.xml,.musicxml,.mxl';
 const LONG_PRESS_TIMEOUT_MS = 520;
-const NOW_PLAYING_SEPARATOR = '\u00A0\u2022\u00A0';
 
 const DEMO_TRACKS = [
   {
@@ -76,6 +75,44 @@ function clearNfcFromUrl() {
   url.searchParams.delete('nfc_type');
   url.searchParams.delete('nfc_key');
   window.history.replaceState({}, '', url.toString());
+}
+
+function OverflowMarquee({ text, className, ariaLive }) {
+  const containerRef = useRef(null);
+  const contentRef = useRef(null);
+  const [overflowing, setOverflowing] = useState(false);
+
+  useEffect(() => {
+    const containerEl = containerRef.current;
+    const contentEl = contentRef.current;
+    if (!containerEl || !contentEl) return undefined;
+
+    const measure = () => {
+      setOverflowing(contentEl.scrollWidth > containerEl.clientWidth + 2);
+    };
+
+    measure();
+    const resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    if (resizeObserver) {
+      resizeObserver.observe(containerEl);
+      resizeObserver.observe(contentEl);
+    }
+    window.addEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('resize', measure);
+      resizeObserver?.disconnect();
+    };
+  }, [text]);
+
+  return (
+    <div
+      ref={containerRef}
+      className={`${className}${overflowing ? ' overflow-marquee overflow-marquee-active' : ''}`}
+      aria-live={ariaLive}
+    >
+      <span ref={contentRef}>{text}</span>
+    </div>
+  );
 }
 
 export default function App() {
@@ -278,7 +315,7 @@ export default function App() {
     if (!payload) return;
     const { resource_type: resourceType, resource_key: resourceKey } = payload;
     if (resourceType === 'track') {
-      const idx = tracks.findIndex((t) => t.url_key === resourceKey);
+      const idx = tracks.findIndex((t) => String(t.url_key) === String(resourceKey) || String(t.id) === String(resourceKey));
       if (idx < 0) {
         setAudiobookError('Scanned track was not found in your library.');
         return;
@@ -568,9 +605,6 @@ export default function App() {
   const showAudiobookMode = audiobookMode && !!user;
 
   const hideAudiobookPlayer = showAudiobookMode && !audiobookContextOpen;
-  const albumNowPlayingMarqueeText = currentTrack?.title
-    ? `Now playing: ${currentTrack.title}${NOW_PLAYING_SEPARATOR}Now playing: ${currentTrack.title}`
-    : '';
 
   return (
     <div className={`app-shell${showAudiobookMode ? ' audiobook-shell-mode' : ''}${hideAudiobookPlayer ? ' audiobook-player-collapsed' : ''}`}>
@@ -660,12 +694,10 @@ export default function App() {
                 ) : (
                   <div className="audiobook-cover audiobook-cover-placeholder"><IconNote size={36} /></div>
                 )}
-                <div className="audiobook-title">{audiobookResource.title}</div>
+                <OverflowMarquee text={audiobookResource.title} className="audiobook-title" />
                 <div className="audiobook-subtitle">{audiobookResource.subtitle || audiobookResource.type}</div>
                 {audiobookResource.type === 'album' && currentTrack?.title && (
-                  <div className="audiobook-track-marquee" aria-live="polite">
-                    <span>{albumNowPlayingMarqueeText}</span>
-                  </div>
+                  <OverflowMarquee text={`Now playing: ${currentTrack.title}`} className="audiobook-track-marquee" ariaLive="polite" />
                 )}
               </div>
             )}

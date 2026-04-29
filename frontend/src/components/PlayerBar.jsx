@@ -124,6 +124,30 @@ export default function PlayerBar({
   }
 
   const effectiveCollapsed = !audiobookMode && collapsed;
+  const playbackSettingsControls = (
+    <>
+      <div className="volume-row">
+        <IconVolume size={16} />
+        <input
+          className="volume-slider"
+          type="range"
+          min={0}
+          max={1}
+          step={0.02}
+          value={volume}
+          onChange={(e) => setVolume(Number(e.target.value))}
+        />
+      </div>
+      <select className="speed-select" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
+        <option value={0.5}>0.5×</option>
+        <option value={0.75}>0.75×</option>
+        <option value={1}>1×</option>
+        <option value={1.25}>1.25×</option>
+        <option value={1.5}>1.5×</option>
+        <option value={2}>2×</option>
+      </select>
+    </>
+  );
 
   return (
     <>
@@ -209,67 +233,28 @@ export default function PlayerBar({
           )}
         </div>
 
-        {/* Extras */}
-        <div className="player-extras">
-          <div className="volume-row">
-            <IconVolume size={16} />
-            <input
-              className="volume-slider"
-              type="range"
-              min={0}
-              max={1}
-              step={0.02}
-              value={volume}
-              onChange={(e) => setVolume(Number(e.target.value))}
-            />
-          </div>
-          <select className="speed-select" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
-            <option value={0.5}>0.5×</option>
-            <option value={0.75}>0.75×</option>
-            <option value={1}>1×</option>
-            <option value={1.25}>1.25×</option>
-            <option value={1.5}>1.5×</option>
-            <option value={2}>2×</option>
-          </select>
-        </div>
-
         {!audiobookMode && (
-          <>
-            <button
-              className="ctrl-btn player-settings-btn"
-              title="Playback settings"
-              aria-label="Playback settings"
-              onClick={() => setSettingsOpen((v) => !v)}
-            >
-              <IconKebabVertical size={16} />
-            </button>
-
-            {settingsOpen && (
-              <div className="player-settings-popover">
-                <div className="volume-row">
-                  <IconVolume size={16} />
-                  <input
-                    className="volume-slider"
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.02}
-                    value={volume}
-                    onChange={(e) => setVolume(Number(e.target.value))}
-                  />
-                </div>
-                <select className="speed-select" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
-                  <option value={0.5}>0.5×</option>
-                  <option value={0.75}>0.75×</option>
-                  <option value={1}>1×</option>
-                  <option value={1.25}>1.25×</option>
-                  <option value={1.5}>1.5×</option>
-                  <option value={2}>2×</option>
-                </select>
-              </div>
-            )}
-          </>
+          <div className="player-extras">
+            {playbackSettingsControls}
+          </div>
         )}
+
+        <>
+          <button
+            className="ctrl-btn player-settings-btn"
+            title="Playback settings"
+            aria-label="Playback settings"
+            onClick={() => setSettingsOpen((v) => !v)}
+          >
+            <IconKebabVertical size={16} />
+          </button>
+
+          {settingsOpen && (
+            <div className="player-settings-popover">
+              {playbackSettingsControls}
+            </div>
+          )}
+        </>
       </div>
     </>
   );
