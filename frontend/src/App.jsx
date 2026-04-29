@@ -87,29 +87,38 @@ function OverflowMarquee({ text, className, ariaLive }) {
     const containerEl = containerRef.current;
     const contentEl = contentRef.current;
     if (!containerEl || !contentEl) return undefined;
+    let rafId = 0;
 
-    const measure = () => {
+    const measureNow = () => {
       // Small tolerance avoids false positives from subpixel rounding differences between browsers.
       setOverflowing(contentEl.scrollWidth > containerEl.clientWidth + OVERFLOW_TOLERANCE_PX);
     };
+    const scheduleMeasure = () => {
+      if (rafId) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = 0;
+        measureNow();
+      });
+    };
 
-    measure();
-    const resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    measureNow();
+    const resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleMeasure) : null;
     if (resizeObserver) {
       resizeObserver.observe(containerEl);
       resizeObserver.observe(contentEl);
     }
-    window.addEventListener('resize', measure);
+    window.addEventListener('resize', scheduleMeasure);
     return () => {
-      window.removeEventListener('resize', measure);
+      window.removeEventListener('resize', scheduleMeasure);
       resizeObserver?.disconnect();
+      if (rafId) window.cancelAnimationFrame(rafId);
     };
   }, [text]);
 
   return (
     <div
       ref={containerRef}
-      className={[className, overflowing ? 'overflow-marquee overflow-marquee-active' : ''].filter(Boolean).join(' ')}
+      className={[className, 'overflow-marquee', overflowing ? 'overflow-marquee-active' : ''].filter(Boolean).join(' ')}
       aria-live={ariaLive}
     >
       <span ref={contentRef}>{text}</span>
