@@ -20,6 +20,7 @@ import {
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const SCORE_EXTS = '.pdf,.xml,.musicxml,.mxl';
 const LONG_PRESS_TIMEOUT_MS = 520;
+const AUDIOBOOK_MARQUEE_SEPARATOR = '\u00A0\u2022\u00A0';
 
 const DEMO_TRACKS = [
   {
@@ -660,8 +661,8 @@ export default function App() {
                 <div className="audiobook-title">{audiobookResource.title}</div>
                 <div className="audiobook-subtitle">{audiobookResource.subtitle || audiobookResource.type}</div>
                 {audiobookResource.type === 'album' && currentTrack?.title && (
-                  <div className="audiobook-track-marquee" aria-label={`Now playing ${currentTrack.title}`}>
-                    <span>{`${audiobookNowPlayingText} \u00A0\u2022\u00A0 ${audiobookNowPlayingText}`}</span>
+                  <div className="audiobook-track-marquee" aria-live="polite">
+                    <span>{`${audiobookNowPlayingText}${AUDIOBOOK_MARQUEE_SEPARATOR}${audiobookNowPlayingText}`}</span>
                   </div>
                 )}
               </div>
