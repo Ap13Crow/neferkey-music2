@@ -1156,6 +1156,12 @@ body { background: var(--bg-primary); color: var(--text-primary); overflow: hidd
   0% { transform: translateX(0); }
   100% { transform: translateX(-50%); }
 }
+@media (prefers-reduced-motion: reduce) {
+  .audiobook-track-marquee span {
+    animation: none;
+    transform: none;
+  }
+}
 .audiobook-error {
   max-width: min(440px, 100%);
 }
