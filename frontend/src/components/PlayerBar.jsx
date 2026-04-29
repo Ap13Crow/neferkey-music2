@@ -18,6 +18,7 @@ export default function PlayerBar({
   onIndexChange,
   playIntent,
   audiobookMode = false,
+  hidden = false,
 }) {
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
@@ -165,7 +166,7 @@ export default function PlayerBar({
         />
       )}
 
-      <div className={`player-bar${effectiveCollapsed ? ' mini' : ''}${audiobookMode ? ' audiobook-player-bar' : ''}`}>
+      <div className={`player-bar${effectiveCollapsed ? ' mini' : ''}${audiobookMode ? ' audiobook-player-bar' : ''}${hidden ? ' audiobook-player-hidden' : ''}`}>
         {!audiobookMode && (
           <button
             className="player-mini-btn"

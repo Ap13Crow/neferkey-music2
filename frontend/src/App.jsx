@@ -726,15 +726,14 @@ export default function App() {
         ) : renderContent()}
       </main>
 
-      <div className={hideAudiobookPlayer ? 'audiobook-player-hidden' : ''}>
-        <PlayerBar
-          queue={queue}
-          currentIndex={queueIndex}
-          onIndexChange={setQueueIndex}
-          playIntent={playIntent}
-          audiobookMode={showAudiobookMode}
-        />
-      </div>
+      <PlayerBar
+        queue={queue}
+        currentIndex={queueIndex}
+        onIndexChange={setQueueIndex}
+        playIntent={playIntent}
+        audiobookMode={showAudiobookMode}
+        hidden={hideAudiobookPlayer}
+      />
 
       {searchOpen && (
         <SearchModal
